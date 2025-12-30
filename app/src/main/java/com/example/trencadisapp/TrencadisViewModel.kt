@@ -50,7 +50,7 @@ data class TrencadisState(
     val selectedPixel: PixelData? = null,
     val selectionMode: PixelSelectionMode = PixelSelectionMode.SEQUENCE,
     val sequenceIndex: Int = 0,
-    val blockSize: Int = 20,
+    val blockSize: Int = 15,
     val synthState: SynthState = SynthState(),
     val musicState: MusicState = MusicState(),
     val touchX: Float = 0f,
@@ -60,7 +60,8 @@ data class TrencadisState(
     val showScalesPanel: Boolean = false,
     val showKeysPanel: Boolean = false,
     val showSynthPanel: Boolean = false,
-    val isAudioInitialized: Boolean = false
+    val isAudioInitialized: Boolean = false,
+    val useFrontCamera: Boolean = false
 )
 
 class TrencadisViewModel(application: Application) : AndroidViewModel(application) {
@@ -197,10 +198,10 @@ class TrencadisViewModel(application: Application) : AndroidViewModel(applicatio
         _state.update { it.copy(selectionMode = mode) }
         
         val newBlockSize = when (mode) {
-            PixelSelectionMode.SEQUENCE -> 20
-            PixelSelectionMode.BRIGHTEST -> 10
-            PixelSelectionMode.CENTER -> 20
-            PixelSelectionMode.POINTER -> 10
+            PixelSelectionMode.SEQUENCE -> 15
+            PixelSelectionMode.BRIGHTEST -> 12
+            PixelSelectionMode.CENTER -> 15
+            PixelSelectionMode.POINTER -> 12
         }
         _state.update { it.copy(blockSize = newBlockSize) }
         
@@ -278,6 +279,9 @@ class TrencadisViewModel(application: Application) : AndroidViewModel(applicatio
     fun setScalesPanel(show: Boolean) = _state.update { it.copy(showScalesPanel = show) }
     fun setKeysPanel(show: Boolean) = _state.update { it.copy(showKeysPanel = show) }
     fun setSynthPanel(show: Boolean) = _state.update { it.copy(showSynthPanel = show) }
+    
+    // Camera selection
+    fun toggleCamera() = _state.update { it.copy(useFrontCamera = !it.useFrontCamera) }
     
     override fun onCleared() {
         super.onCleared()

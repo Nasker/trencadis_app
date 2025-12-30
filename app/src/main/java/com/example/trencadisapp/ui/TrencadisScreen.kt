@@ -71,6 +71,7 @@ fun TrencadisScreen(
             // Camera preview (hidden, just for analysis)
             CameraPreviewWithAnalysis(
                 blockSize = state.blockSize,
+                useFrontCamera = state.useFrontCamera,
                 onPixelGridReady = { grid ->
                     viewModel.updatePixelGrid(grid)
                 }
@@ -122,7 +123,9 @@ fun TrencadisScreen(
             ) {
                 ModesPanel(
                     currentMode = state.selectionMode,
-                    onModeSelected = { viewModel.setSelectionMode(it) }
+                    useFrontCamera = state.useFrontCamera,
+                    onModeSelected = { viewModel.setSelectionMode(it) },
+                    onToggleCamera = { viewModel.toggleCamera() }
                 )
             }
             
@@ -205,6 +208,7 @@ fun TrencadisScreen(
 @Composable
 private fun CameraPreviewWithAnalysis(
     blockSize: Int,
+    useFrontCamera: Boolean,
     onPixelGridReady: (com.example.trencadisapp.camera.PixelGrid) -> Unit
 ) {
     val context = LocalContext.current
@@ -239,17 +243,26 @@ private fun CameraPreviewWithAnalysis(
                         it.surfaceProvider = previewView.surfaceProvider
                     }
                 
+                // Mirror only for front camera (selfie mode)
                 val imageAnalyzer = ImageAnalysis.Builder()
                     .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
                     .build()
                     .also {
                         it.setAnalyzer(
                             cameraExecutor,
-                            CameraPixelAnalyzer(blockSize, onPixelGridReady)
+                            CameraPixelAnalyzer(
+                                blockSize = blockSize,
+                                mirrorHorizontally = useFrontCamera,
+                                onPixelGridReady = onPixelGridReady
+                            )
                         )
                     }
                 
-                val cameraSelector = CameraSelector.DEFAULT_BACK_CAMERA
+                val cameraSelector = if (useFrontCamera) {
+                    CameraSelector.DEFAULT_FRONT_CAMERA
+                } else {
+                    CameraSelector.DEFAULT_BACK_CAMERA
+                }
                 
                 try {
                     cameraProvider.unbindAll()

@@ -24,7 +24,9 @@ import com.example.trencadisapp.camera.PixelSelectionMode
 @Composable
 fun ModesPanel(
     currentMode: PixelSelectionMode,
+    useFrontCamera: Boolean,
     onModeSelected: (PixelSelectionMode) -> Unit,
+    onToggleCamera: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     Column(
@@ -53,6 +55,37 @@ fun ModesPanel(
                 label = label,
                 isSelected = currentMode == mode,
                 onClick = { onModeSelected(mode) }
+            )
+        }
+        
+        Spacer(modifier = Modifier.height(8.dp))
+        
+        Text(
+            text = "CAM",
+            color = Color.White,
+            fontSize = 12.sp,
+            fontWeight = FontWeight.Bold
+        )
+        
+        // Camera toggle button
+        Box(
+            modifier = Modifier
+                .size(60.dp)
+                .clip(RoundedCornerShape(8.dp))
+                .background(if (useFrontCamera) Color(0xFF2196F3) else Color(0xFF424242))
+                .border(
+                    width = 2.dp,
+                    color = Color.White.copy(alpha = 0.5f),
+                    shape = RoundedCornerShape(8.dp)
+                )
+                .clickable(onClick = onToggleCamera),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                text = if (useFrontCamera) "FRONT" else "BACK",
+                color = Color.White,
+                fontSize = 10.sp,
+                fontWeight = FontWeight.Bold
             )
         }
     }

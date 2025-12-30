@@ -12,6 +12,7 @@ import android.graphics.BitmapFactory
 
 class CameraPixelAnalyzer(
     private val blockSize: Int = 20,
+    private val mirrorHorizontally: Boolean = false,
     private val onPixelGridReady: (PixelGrid) -> Unit
 ) : ImageAnalysis.Analyzer {
     
@@ -73,9 +74,15 @@ class CameraPixelAnalyzer(
         
         val bitmap = BitmapFactory.decodeByteArray(imageBytes, 0, imageBytes.size)
         
-        // Mirror horizontally for front camera feel (like the original Processing app)
+        // Apply rotation from camera sensor and optional horizontal mirror for front camera
+        val rotationDegrees = image.imageInfo.rotationDegrees
         val matrix = Matrix().apply {
-            preScale(-1f, 1f)
+            // Rotate to correct orientation
+            postRotate(rotationDegrees.toFloat())
+            // Mirror horizontally for front camera (after rotation)
+            if (mirrorHorizontally) {
+                postScale(-1f, 1f)
+            }
         }
         
         return Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height, matrix, true)

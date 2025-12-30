@@ -120,49 +120,48 @@ private fun DrawScope.drawCubistShape(
     // Map brightness to size multiplier (0-10 like original)
     val brightMap = brightness * 10f
     
-    // Rotation based on hue (only for certain modes)
+    // More noticeable rotation based on hue
     val rotationFactor = when (selectionMode) {
-        PixelSelectionMode.BRIGHTEST, PixelSelectionMode.CENTER -> 1f
-        else -> 0f
+        PixelSelectionMode.BRIGHTEST, PixelSelectionMode.CENTER -> 1.0f  // Full rotation range
+        else -> 0.6f  // Moderate in other modes
     }
-    val rotation = (hue / 360f) * 360f * rotationFactor
+    val rotation = (hue / 360f) * 90f * rotationFactor  // Max 90 or 54 degrees
     
     // Color with alpha
     val color = Color(pixel.red, pixel.green, pixel.blue, 0.78f)
     
-    translate(x, y) {
-        rotate(rotation) {
-            when (selectionMode) {
-                PixelSelectionMode.BRIGHTEST, PixelSelectionMode.CENTER -> {
-                    // Alternate between rect and ellipse based on position and cutoff
-                    val variation = (pixel.gridX * pixel.gridY) % ((cutoffValue * 10).toInt().coerceAtLeast(1) + 1)
-                    val shapeSize = blockWidth.coerceAtMost(blockHeight) * brightMap * 0.1f
-                    
-                    if (variation == 0) {
-                        drawRect(
-                            color = color,
-                            topLeft = Offset(-shapeSize / 2, -shapeSize / 2),
-                            size = Size(shapeSize, shapeSize)
-                        )
-                    } else {
-                        drawOval(
-                            color = color,
-                            topLeft = Offset(-shapeSize / 2, -shapeSize / 2),
-                            size = Size(shapeSize, shapeSize)
-                        )
-                    }
-                }
-                else -> {
-                    // Simple rect scaled by brightness
-                    val baseSize = blockWidth.coerceAtMost(blockHeight)
-                    val shapeSize = baseSize * 0.6f + 0.4f * brightness * baseSize
-                    
+    // Rotate around the shape's own center position using pivot
+    rotate(degrees = rotation, pivot = Offset(x, y)) {
+        when (selectionMode) {
+            PixelSelectionMode.BRIGHTEST, PixelSelectionMode.CENTER -> {
+                // Alternate between rect and ellipse based on position and cutoff
+                val variation = (pixel.gridX * pixel.gridY) % ((cutoffValue * 10).toInt().coerceAtLeast(1) + 1)
+                val shapeSize = blockWidth.coerceAtMost(blockHeight) * (1.15f + brightMap * 0.03f)  // Bigger shapes
+                
+                if (variation == 0) {
                     drawRect(
                         color = color,
-                        topLeft = Offset(-shapeSize / 2, -shapeSize / 2),
+                        topLeft = Offset(x - shapeSize / 2, y - shapeSize / 2),
+                        size = Size(shapeSize, shapeSize)
+                    )
+                } else {
+                    drawOval(
+                        color = color,
+                        topLeft = Offset(x - shapeSize / 2, y - shapeSize / 2),
                         size = Size(shapeSize, shapeSize)
                     )
                 }
+            }
+            else -> {
+                // Simple rect - slightly oversized for better visual
+                val baseSize = blockWidth.coerceAtMost(blockHeight)
+                val shapeSize = baseSize * 1.15f + 0.1f * brightness * baseSize  // Bigger shapes
+                
+                drawRect(
+                    color = color,
+                    topLeft = Offset(x - shapeSize / 2, y - shapeSize / 2),
+                    size = Size(shapeSize, shapeSize)
+                )
             }
         }
     }
