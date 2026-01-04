@@ -9,7 +9,7 @@
     <option name="autoReloadType" value="NONE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="2a35c421-9cff-4068-b39d-6c27c8725208" name="Changes" comment="Proof of concept working">
+    <list default="true" id="2a35c421-9cff-4068-b39d-6c27c8725208" name="Changes" comment="Looks nice with both cameras">
       <change beforePath="$PROJECT_DIR$/.gradle/8.13/executionHistory/executionHistory.bin" beforeDir="false" afterPath="$PROJECT_DIR$/.gradle/8.13/executionHistory/executionHistory.bin" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.gradle/8.13/executionHistory/executionHistory.lock" beforeDir="false" afterPath="$PROJECT_DIR$/.gradle/8.13/executionHistory/executionHistory.lock" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.gradle/8.13/fileHashes/fileHashes.bin" beforeDir="false" afterPath="$PROJECT_DIR$/.gradle/8.13/fileHashes/fileHashes.bin" afterDir="false" />
@@ -17,9 +17,9 @@
       <change beforePath="$PROJECT_DIR$/.gradle/8.13/fileHashes/resourceHashesCache.bin" beforeDir="false" afterPath="$PROJECT_DIR$/.gradle/8.13/fileHashes/resourceHashesCache.bin" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.gradle/buildOutputCleanup/buildOutputCleanup.lock" beforeDir="false" afterPath="$PROJECT_DIR$/.gradle/buildOutputCleanup/buildOutputCleanup.lock" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.gradle/file-system.probe" beforeDir="false" afterPath="$PROJECT_DIR$/.gradle/file-system.probe" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/deploymentTargetSelector.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/deploymentTargetSelector.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/app/src/main/java/com/example/trencadisapp/TrencadisViewModel.kt" beforeDir="false" afterPath="$PROJECT_DIR$/app/src/main/java/com/example/trencadisapp/TrencadisViewModel.kt" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/app/src/main/java/com/example/trencadisapp/camera/CameraPixelAnalyzer.kt" beforeDir="false" afterPath="$PROJECT_DIR$/app/src/main/java/com/example/trencadisapp/camera/CameraPixelAnalyzer.kt" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/app/src/main/java/com/example/trencadisapp/ui/CubistCanvas.kt" beforeDir="false" afterPath="$PROJECT_DIR$/app/src/main/java/com/example/trencadisapp/ui/CubistCanvas.kt" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/app/src/main/java/com/example/trencadisapp/ui/TrencadisScreen.kt" beforeDir="false" afterPath="$PROJECT_DIR$/app/src/main/java/com/example/trencadisapp/ui/TrencadisScreen.kt" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/app/src/main/java/com/example/trencadisapp/ui/components/ControlPanels.kt" beforeDir="false" afterPath="$PROJECT_DIR$/app/src/main/java/com/example/trencadisapp/ui/components/ControlPanels.kt" afterDir="false" />
@@ -32,7 +32,7 @@
   <component name="ClangdSettings">
     <option name="formatViaClangd" value="false" />
   </component>
-  <component name="ExecutionTargetManager" SELECTED_TARGET="device_and_snapshot_combo_box_target[DeviceId(pluginId=PhysicalDevice, isTemplate=false, identifier=serial=3458336556003NZ)]" />
+  <component name="ExecutionTargetManager" SELECTED_TARGET="device_and_snapshot_combo_box_target[DeviceId(pluginId=PhysicalDevice, isTemplate=false, identifier=serial=R92Y707279Z)]" />
   <component name="ExternalProjectsData">
     <projectState path="$PROJECT_DIR$">
       <ProjectState />
@@ -182,7 +182,15 @@
       <option name="project" value="LOCAL" />
       <updated>1767049352659</updated>
     </task>
-    <option name="localTasksCounter" value="3" />
+    <task id="LOCAL-00003" summary="Looks nice with both cameras">
+      <option name="closed" value="true" />
+      <created>1767096603755</created>
+      <option name="number" value="00003" />
+      <option name="presentableId" value="LOCAL-00003" />
+      <option name="project" value="LOCAL" />
+      <updated>1767096603755</updated>
+    </task>
+    <option name="localTasksCounter" value="4" />
     <servers />
   </component>
   <component name="Vcs.Log.Tabs.Properties">
@@ -199,7 +207,8 @@
   <component name="VcsManagerConfiguration">
     <MESSAGE value="Added Kotlin project startup" />
     <MESSAGE value="Proof of concept working" />
-    <option name="LAST_COMMIT_MESSAGE" value="Proof of concept working" />
+    <MESSAGE value="Looks nice with both cameras" />
+    <option name="LAST_COMMIT_MESSAGE" value="Looks nice with both cameras" />
   </component>
   <component name="play_dynamic_filters_status">
     <option name="appIdToCheckInfo">

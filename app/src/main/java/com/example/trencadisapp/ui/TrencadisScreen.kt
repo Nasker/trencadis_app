@@ -25,6 +25,7 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.trencadisapp.TrencadisViewModel
 import com.example.trencadisapp.camera.CameraPixelAnalyzer
+import com.example.trencadisapp.ui.components.AcidPanel
 import com.example.trencadisapp.ui.components.KeysPanel
 import com.example.trencadisapp.ui.components.ModesPanel
 import com.example.trencadisapp.ui.components.ScalesPanel
@@ -77,12 +78,14 @@ fun TrencadisScreen(
                 }
             )
             
-            // Cubist visualization overlay
+            // Cubist visualization overlay with acid patterns
             CubistCanvas(
                 pixelGrid = state.pixelGrid,
                 selectedPixel = state.selectedPixel,
                 selectionMode = state.selectionMode,
                 cutoffValue = state.synthState.cutoff,
+                acidModulation = state.acidModulation,
+                acidPatternIndex = state.acidPatternIndex,
                 modifier = Modifier.fillMaxSize(),
                 onTouch = { x, y, isTouching ->
                     viewModel.setTouch(x, y, isTouching)
@@ -101,14 +104,16 @@ fun TrencadisScreen(
                                 val width = size.width.toFloat()
                                 val height = size.height.toFloat()
                                 
-                                // Left edge - modes panel
-                                viewModel.setModesPanel(x < width * 0.05f)
+                                // Left edge - modes panel (upper half)
+                                viewModel.setModesPanel(x < width * 0.05f && y < height * 0.5f)
                                 // Top edge - scales panel
                                 viewModel.setScalesPanel(y < height * 0.05f)
                                 // Bottom edge - keys panel
-                                viewModel.setKeysPanel(y > height * 0.95f)
+                                viewModel.setKeysPanel(y > height * 0.95f && x > width * 0.2f)
                                 // Right edge - synth panel
                                 viewModel.setSynthPanel(x > width * 0.95f)
+                                // Bottom-left corner - acid panel
+                                viewModel.setAcidPanel(x < width * 0.15f && y > height * 0.85f)
                             }
                         )
                     }
@@ -175,6 +180,22 @@ fun TrencadisScreen(
                 SynthPanel(
                     synthState = state.synthState,
                     onSynthStateChange = { viewModel.updateSynthState(it) }
+                )
+            }
+            
+            // Acid Panel (Bottom-left corner) - slides in/out
+            AnimatedVisibility(
+                visible = state.showAcidPanel,
+                enter = slideInHorizontally(initialOffsetX = { -it }) + fadeIn(),
+                exit = slideOutHorizontally(targetOffsetX = { -it }) + fadeOut(),
+                modifier = Modifier.align(Alignment.BottomStart)
+            ) {
+                AcidPanel(
+                    acidModulation = state.acidModulation,
+                    acidPatternIndex = state.acidPatternIndex,
+                    onToggleAcid = { viewModel.toggleAcid() },
+                    onPatternSelected = { viewModel.setAcidPattern(it) },
+                    onModulationChanged = { newModulation -> viewModel.setAcidModulation(newModulation) }
                 )
             }
             

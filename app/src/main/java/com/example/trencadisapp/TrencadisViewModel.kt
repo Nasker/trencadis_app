@@ -8,6 +8,8 @@ import com.example.trencadisapp.audio.PdAudioEngine
 import com.example.trencadisapp.camera.PixelData
 import com.example.trencadisapp.camera.PixelGrid
 import com.example.trencadisapp.camera.PixelSelectionMode
+import com.example.trencadisapp.ui.AcidModulation
+import com.example.trencadisapp.ui.AcidPattern
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -50,7 +52,7 @@ data class TrencadisState(
     val selectedPixel: PixelData? = null,
     val selectionMode: PixelSelectionMode = PixelSelectionMode.SEQUENCE,
     val sequenceIndex: Int = 0,
-    val blockSize: Int = 15,
+    val blockSize: Int = 8,
     val synthState: SynthState = SynthState(),
     val musicState: MusicState = MusicState(),
     val touchX: Float = 0f,
@@ -61,7 +63,10 @@ data class TrencadisState(
     val showKeysPanel: Boolean = false,
     val showSynthPanel: Boolean = false,
     val isAudioInitialized: Boolean = false,
-    val useFrontCamera: Boolean = false
+    val useFrontCamera: Boolean = false,
+    val acidModulation: AcidModulation = AcidModulation(),
+    val acidPatternIndex: Int = 9,  // Default to WAVE_INTERFERENCE (ACID)
+    val showAcidPanel: Boolean = false
 )
 
 class TrencadisViewModel(application: Application) : AndroidViewModel(application) {
@@ -282,6 +287,19 @@ class TrencadisViewModel(application: Application) : AndroidViewModel(applicatio
     
     // Camera selection
     fun toggleCamera() = _state.update { it.copy(useFrontCamera = !it.useFrontCamera) }
+    
+    // Acid pattern controls
+    fun toggleAcid() = _state.update { 
+        it.copy(acidModulation = it.acidModulation.copy(enabled = !it.acidModulation.enabled)) 
+    }
+    
+    fun setAcidPattern(index: Int) = _state.update { it.copy(acidPatternIndex = index) }
+    
+    fun setAcidModulation(modulation: AcidModulation) {
+        _state.update { it.copy(acidModulation = modulation) }
+    }
+    
+    fun setAcidPanel(show: Boolean) = _state.update { it.copy(showAcidPanel = show) }
     
     override fun onCleared() {
         super.onCleared()

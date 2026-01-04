@@ -20,6 +20,8 @@ import androidx.compose.ui.unit.sp
 import com.example.trencadisapp.SynthState
 import com.example.trencadisapp.audio.MusicConstants
 import com.example.trencadisapp.camera.PixelSelectionMode
+import com.example.trencadisapp.ui.AcidModulation
+import com.example.trencadisapp.ui.AcidPattern
 
 @Composable
 fun ModesPanel(
@@ -512,6 +514,189 @@ private fun SynthSlider(
                 thumbColor = Color(0xFF785050),
                 activeTrackColor = Color(0xFF785050),
                 inactiveTrackColor = Color(0xFF424242)
+            ),
+            modifier = Modifier.weight(1f)
+        )
+    }
+}
+
+@Composable
+fun AcidPanel(
+    acidModulation: AcidModulation,
+    acidPatternIndex: Int,
+    onToggleAcid: () -> Unit,
+    onPatternSelected: (Int) -> Unit,
+    onModulationChanged: (AcidModulation) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Column(
+        modifier = modifier
+            .clip(RoundedCornerShape(topEnd = 16.dp))
+            .background(Color(0xCC1A0A2E))
+            .padding(12.dp)
+            .width(280.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        // Header with toggle
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text(
+                text = "🌀 ACID",
+                color = if (acidModulation.enabled) Color(0xFFFF00FF) else Color.White,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Bold
+            )
+            
+            Box(
+                modifier = Modifier
+                    .size(50.dp, 30.dp)
+                    .clip(RoundedCornerShape(15.dp))
+                    .background(if (acidModulation.enabled) Color(0xFFFF00FF) else Color(0xFF424242))
+                    .clickable(onClick = onToggleAcid),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = if (acidModulation.enabled) "ON" else "OFF",
+                    color = Color.White,
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+        }
+        
+        // Pattern selector
+        Text(
+            text = "PATTERN",
+            color = Color.White.copy(alpha = 0.7f),
+            fontSize = 10.sp
+        )
+        
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            AcidPattern.PATTERN_NAMES.forEachIndexed { index, (name, _) ->
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(4.dp))
+                        .background(
+                            if (index == acidPatternIndex) Color(0xFFFF00FF) 
+                            else Color(0xFF2A1A4E)
+                        )
+                        .clickable { onPatternSelected(index) }
+                        .padding(horizontal = 8.dp, vertical = 4.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = name,
+                        color = Color.White,
+                        fontSize = 9.sp,
+                        fontWeight = if (index == acidPatternIndex) FontWeight.Bold else FontWeight.Normal
+                    )
+                }
+            }
+        }
+        
+        // MultiShape toggle
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text(
+                text = "MULTI",
+                color = Color(0xFFFF00FF).copy(alpha = 0.8f),
+                fontSize = 10.sp
+            )
+            Box(
+                modifier = Modifier
+                    .size(40.dp, 24.dp)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(if (acidModulation.multiShape) Color(0xFFFF00FF) else Color(0xFF2A1A4E))
+                    .clickable { onModulationChanged(acidModulation.copy(multiShape = !acidModulation.multiShape)) },
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = if (acidModulation.multiShape) "ON" else "OFF",
+                    color = Color.White,
+                    fontSize = 8.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+        }
+        
+        // Modulation sliders
+        AcidSlider(
+            label = "HUE",
+            value = acidModulation.hueAmount,
+            onValueChange = { onModulationChanged(acidModulation.copy(hueAmount = it)) }
+        )
+        
+        AcidSlider(
+            label = "SIZE",
+            value = acidModulation.sizeAmount,
+            onValueChange = { onModulationChanged(acidModulation.copy(sizeAmount = it)) }
+        )
+        
+        AcidSlider(
+            label = "ROTATE",
+            value = acidModulation.rotationAmount,
+            onValueChange = { onModulationChanged(acidModulation.copy(rotationAmount = it)) }
+        )
+        
+        AcidSlider(
+            label = "ALPHA",
+            value = acidModulation.alphaAmount,
+            onValueChange = { onModulationChanged(acidModulation.copy(alphaAmount = it)) }
+        )
+        
+        // Speed slider with exponential curve for more low-speed range
+        // Slider goes 0-1, we map it exponentially: speed = slider^2 * 0.5
+        // This gives range 0 to 0.5 with more precision at low values
+        AcidSlider(
+            label = "SPEED",
+            value = kotlin.math.sqrt(acidModulation.animationSpeed / 0.5f).coerceIn(0f, 1f),
+            onValueChange = { 
+                val exponentialSpeed = it * it * 0.5f  // 0 to 0.5 with exponential curve
+                onModulationChanged(acidModulation.copy(animationSpeed = exponentialSpeed)) 
+            }
+        )
+    }
+}
+
+@Composable
+private fun AcidSlider(
+    label: String,
+    value: Float,
+    min: Float = 0f,
+    max: Float = 1f,
+    onValueChange: (Float) -> Unit
+) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(28.dp)
+    ) {
+        Text(
+            text = label,
+            color = Color(0xFFFF00FF).copy(alpha = 0.8f),
+            fontSize = 10.sp,
+            modifier = Modifier.width(50.dp)
+        )
+        Slider(
+            value = value,
+            onValueChange = onValueChange,
+            valueRange = min..max,
+            colors = SliderDefaults.colors(
+                thumbColor = Color(0xFFFF00FF),
+                activeTrackColor = Color(0xFFFF00FF),
+                inactiveTrackColor = Color(0xFF2A1A4E)
             ),
             modifier = Modifier.weight(1f)
         )
