@@ -57,6 +57,8 @@ data class TrencadisState(
     val musicState: MusicState = MusicState(),
     val touchX: Float = 0f,
     val touchY: Float = 0f,
+    val canvasWidth: Float = 1f,
+    val canvasHeight: Float = 1f,
     val isTouching: Boolean = false,
     val showModesPanel: Boolean = false,
     val showScalesPanel: Boolean = false,
@@ -125,12 +127,10 @@ class TrencadisViewModel(application: Application) : AndroidViewModel(applicatio
             PixelSelectionMode.CENTER -> grid.getCenter()
             PixelSelectionMode.POINTER -> {
                 if (state.isTouching) {
-                    // Calculate grid position from touch coordinates
-                    val col = (state.touchX / state.blockSize).toInt().coerceIn(0, grid.cols - 1)
-                    val row = (state.touchY / state.blockSize).toInt().coerceIn(0, grid.rows - 1)
-                    grid.getPixelAt(col, row)
+                    // Calculate grid position from touch coordinates using canvas dimensions
+                    grid.getAtPosition(state.touchX, state.touchY, state.canvasWidth, state.canvasHeight)
                 } else {
-                    grid.getCenter()
+                    null  // No pixel selected when not touching
                 }
             }
         }
@@ -215,13 +215,39 @@ class TrencadisViewModel(application: Application) : AndroidViewModel(applicatio
         pdEngine.setSequencerOn(sequencerOn)
     }
     
-    fun setTouch(x: Float, y: Float, isTouching: Boolean) {
-        _state.update { it.copy(touchX = x, touchY = y, isTouching = isTouching) }
+    fun setTouch(x: Float, y: Float, isTouching: Boolean, canvasWidth: Float = 0f, canvasHeight: Float = 0f) {
+        val prevState = _state.value
+        _state.update { 
+            it.copy(
+                touchX = x, 
+                touchY = y, 
+                isTouching = isTouching,
+                canvasWidth = if (canvasWidth > 0f) canvasWidth else it.canvasWidth,
+                canvasHeight = if (canvasHeight > 0f) canvasHeight else it.canvasHeight
+            ) 
+        }
         
         if (_state.value.selectionMode == PixelSelectionMode.POINTER) {
             pdEngine.setNoteOn(isTouching)
+            
+            // Trigger on press or when position changes while touching
             if (isTouching) {
-                pdEngine.triggerBang()
+                val grid = _state.value.pixelGrid
+                if (grid != null) {
+                    val newState = _state.value
+                    val prevPixel = if (prevState.isTouching) {
+                        grid.getAtPosition(prevState.touchX, prevState.touchY, prevState.canvasWidth, prevState.canvasHeight)
+                    } else null
+                    val newPixel = grid.getAtPosition(x, y, newState.canvasWidth, newState.canvasHeight)
+                    
+                    // Trigger if just started touching OR pixel changed
+                    if (!prevState.isTouching || (prevPixel?.gridX != newPixel?.gridX || prevPixel?.gridY != newPixel?.gridY)) {
+                        newPixel?.let { sendPixelToAudio(it) }
+                        pdEngine.triggerBang()
+                    }
+                } else {
+                    pdEngine.triggerBang()
+                }
             }
         }
     }

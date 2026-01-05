@@ -129,7 +129,7 @@ class AcidPattern {
  */
 data class AcidModulation(
     val enabled: Boolean = false,
-    val multiShape: Boolean = true,   // true: use varied shapes, false: rectangles only
+    val multiShape: Boolean = false,   // true: use varied shapes, false: rectangles only
     val hueAmount: Float = 0.5f,      // 0-1: how much pattern affects hue
     val sizeAmount: Float = 0.3f,      // 0-1: how much pattern affects size
     val rotationAmount: Float = 0.5f,  // 0-1: how much pattern affects rotation

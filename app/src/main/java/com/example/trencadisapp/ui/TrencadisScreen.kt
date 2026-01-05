@@ -8,7 +8,9 @@ import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
 import androidx.compose.animation.*
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
@@ -63,6 +65,9 @@ fun TrencadisScreen(
     // Tap tempo state
     var lastTapTime by remember { mutableLongStateOf(0L) }
     
+    // Hide/show icons with two-finger tap
+    var iconsVisible by remember { mutableStateOf(true) }
+    
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -87,37 +92,33 @@ fun TrencadisScreen(
                 acidModulation = state.acidModulation,
                 acidPatternIndex = state.acidPatternIndex,
                 modifier = Modifier.fillMaxSize(),
-                onTouch = { x, y, isTouching ->
-                    viewModel.setTouch(x, y, isTouching)
+                onTouch = { x, y, isTouching, canvasWidth, canvasHeight ->
+                    viewModel.setTouch(x, y, isTouching, canvasWidth, canvasHeight)
+                },
+                onDoubleTap = {
+                    // Close all open panels
+                    viewModel.setModesPanel(false)
+                    viewModel.setScalesPanel(false)
+                    viewModel.setKeysPanel(false)
+                    viewModel.setSynthPanel(false)
+                    viewModel.setAcidPanel(false)
+                    // Toggle icons visibility
+                    iconsVisible = !iconsVisible
+                },
+                onEdgeDrag = { x, y, width, height ->
+                    // Left edge - modes panel (upper quarter)
+                    viewModel.setModesPanel(x < width * 0.05f && y < height * 0.4f)
+                    // Top edge - scales panel
+                    viewModel.setScalesPanel(y < height * 0.05f)
+                    // Bottom edge - keys panel
+                    viewModel.setKeysPanel(y > height * 0.95f && x > width * 0.2f)
+                    // Right edge - synth panel
+                    viewModel.setSynthPanel(x > width * 0.95f)
+                    // Left edge lower - acid panel (around 3/4 height)
+                    viewModel.setAcidPanel(x < width * 0.1f && y > height * 0.6f && y < height * 0.9f)
                 }
             )
             
-            // Edge detection for panel visibility
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .pointerInput(Unit) {
-                        detectDragGestures(
-                            onDrag = { change, _ ->
-                                val x = change.position.x
-                                val y = change.position.y
-                                val width = size.width.toFloat()
-                                val height = size.height.toFloat()
-                                
-                                // Left edge - modes panel (upper half)
-                                viewModel.setModesPanel(x < width * 0.05f && y < height * 0.5f)
-                                // Top edge - scales panel
-                                viewModel.setScalesPanel(y < height * 0.05f)
-                                // Bottom edge - keys panel
-                                viewModel.setKeysPanel(y > height * 0.95f && x > width * 0.2f)
-                                // Right edge - synth panel
-                                viewModel.setSynthPanel(x > width * 0.95f)
-                                // Bottom-left corner - acid panel
-                                viewModel.setAcidPanel(x < width * 0.15f && y > height * 0.85f)
-                            }
-                        )
-                    }
-            )
             
             // Modes Panel (Left edge)
             AnimatedVisibility(
@@ -183,12 +184,14 @@ fun TrencadisScreen(
                 )
             }
             
-            // Acid Panel (Bottom-left corner) - slides in/out
+            // Acid Panel (Left side, above bottom) - slides in/out
             AnimatedVisibility(
                 visible = state.showAcidPanel,
                 enter = slideInHorizontally(initialOffsetX = { -it }) + fadeIn(),
                 exit = slideOutHorizontally(targetOffsetX = { -it }) + fadeOut(),
-                modifier = Modifier.align(Alignment.BottomStart)
+                modifier = Modifier
+                    .align(Alignment.BottomStart)
+                    .padding(bottom = 80.dp)  // Move up to avoid piano roll icon overlap
             ) {
                 AcidPanel(
                     acidModulation = state.acidModulation,
@@ -199,10 +202,18 @@ fun TrencadisScreen(
                 )
             }
             
-            // Touch hint indicators at edges
-            if (!state.showModesPanel && !state.showScalesPanel && 
-                !state.showKeysPanel && !state.showSynthPanel) {
-                EdgeHints()
+            // Touch hint indicators at edges - hide all icons when any panel is open
+            val anyPanelOpen = state.showModesPanel || state.showScalesPanel || 
+                               state.showKeysPanel || state.showSynthPanel || state.showAcidPanel
+            
+            if (iconsVisible && !anyPanelOpen) {
+                EdgeHints(
+                    onModesClick = { viewModel.setModesPanel(true) },
+                    onScalesClick = { viewModel.setScalesPanel(true) },
+                    onKeysClick = { viewModel.setKeysPanel(true) },
+                    onSynthClick = { viewModel.setSynthPanel(true) },
+                    onAcidClick = { viewModel.setAcidPanel(true) }
+                )
             }
             
         } else {
@@ -302,39 +313,101 @@ private fun CameraPreviewWithAnalysis(
 }
 
 @Composable
-private fun EdgeHints() {
-    Box(modifier = Modifier.fillMaxSize()) {
-        // Left hint
-        Box(
-            modifier = Modifier
-                .align(Alignment.CenterStart)
-                .width(4.dp)
-                .height(60.dp)
-                .background(Color.White.copy(alpha = 0.3f))
-        )
-        // Top hint
-        Box(
-            modifier = Modifier
-                .align(Alignment.TopCenter)
-                .width(60.dp)
-                .height(4.dp)
-                .background(Color.White.copy(alpha = 0.3f))
-        )
-        // Bottom hint
-        Box(
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .width(60.dp)
-                .height(4.dp)
-                .background(Color.White.copy(alpha = 0.3f))
-        )
-        // Right hint
-        Box(
-            modifier = Modifier
-                .align(Alignment.CenterEnd)
-                .width(4.dp)
-                .height(60.dp)
-                .background(Color.White.copy(alpha = 0.3f))
+private fun EdgeHints(
+    onModesClick: () -> Unit = {},
+    onScalesClick: () -> Unit = {},
+    onKeysClick: () -> Unit = {},
+    onSynthClick: () -> Unit = {},
+    onAcidClick: () -> Unit = {},
+    showModes: Boolean = true,
+    showScales: Boolean = true,
+    showKeys: Boolean = true,
+    showSynth: Boolean = true,
+    showAcid: Boolean = true
+) {
+    BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+        val quarterHeight = maxHeight * 0.25f
+        val threeQuarterHeight = maxHeight * 0.75f
+        
+        // Left hint - Camera/Modes at 1/4 height (camera icon)
+        if (showModes) {
+            PanelIconButton(
+                icon = "📷",
+                modifier = Modifier
+                    .align(Alignment.TopStart)
+                    .padding(start = 8.dp, top = quarterHeight - 24.dp),
+                onClick = onModesClick
+            )
+        }
+        
+        // Left hint - Acid at 3/4 height (spiral)
+        if (showAcid) {
+            PanelIconButton(
+                icon = "🌀",
+                modifier = Modifier
+                    .align(Alignment.TopStart)
+                    .padding(start = 8.dp, top = threeQuarterHeight - 24.dp),
+                onClick = onAcidClick
+            )
+        }
+        
+        // Top hint - Scales (treble clef / sol key)
+        if (showScales) {
+            PanelIconButton(
+                icon = "𝄞",
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .padding(top = 8.dp),
+                onClick = onScalesClick
+            )
+        }
+        
+        // Bottom hint - Keys/Piano roll (eighth note)
+        if (showKeys) {
+            PanelIconButton(
+                icon = "♪",
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(bottom = 8.dp),
+                onClick = onKeysClick
+            )
+        }
+        
+        // Right hint - Synth (waveform ~)
+        if (showSynth) {
+            PanelIconButton(
+                icon = "∿",
+                modifier = Modifier
+                    .align(Alignment.CenterEnd)
+                    .padding(end = 8.dp),
+                onClick = onSynthClick
+            )
+        }
+    }
+}
+
+@Composable
+private fun PanelIconButton(
+    icon: String,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit
+) {
+    Box(
+        modifier = modifier
+            .size(48.dp)
+            .background(
+                Color.Black.copy(alpha = 0.5f),
+                shape = androidx.compose.foundation.shape.CircleShape
+            )
+            .pointerInput(Unit) {
+                detectTapGestures(onTap = { onClick() })
+            },
+        contentAlignment = Alignment.Center
+    ) {
+        Text(
+            text = icon,
+            fontSize = 24.sp,
+            color = Color.White.copy(alpha = 0.8f)
         )
     }
 }

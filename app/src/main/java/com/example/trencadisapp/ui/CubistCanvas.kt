@@ -30,7 +30,9 @@ fun CubistCanvas(
     acidModulation: AcidModulation = AcidModulation(),
     acidPatternIndex: Int = 9,
     modifier: Modifier = Modifier,
-    onTouch: (Float, Float, Boolean) -> Unit = { _, _, _ -> }
+    onTouch: (Float, Float, Boolean, Float, Float) -> Unit = { _, _, _, _, _ -> },
+    onDoubleTap: () -> Unit = {},
+    onEdgeDrag: (Float, Float, Float, Float) -> Unit = { _, _, _, _ -> }
 ) {
     // Create and remember the acid pattern generator
     val acidPattern = remember { AcidPattern() }
@@ -63,26 +65,31 @@ fun CubistCanvas(
         modifier = modifier
             .pointerInput(Unit) {
                 detectTapGestures(
+                    onDoubleTap = { onDoubleTap() },
                     onPress = { offset ->
-                        onTouch(offset.x, offset.y, true)
+                        onTouch(offset.x, offset.y, true, size.width.toFloat(), size.height.toFloat())
                         tryAwaitRelease()
-                        onTouch(offset.x, offset.y, false)
+                        onTouch(offset.x, offset.y, false, size.width.toFloat(), size.height.toFloat())
                     }
                 )
             }
             .pointerInput(Unit) {
                 detectDragGestures(
                     onDragStart = { offset ->
-                        onTouch(offset.x, offset.y, true)
+                        onTouch(offset.x, offset.y, true, size.width.toFloat(), size.height.toFloat())
                     },
                     onDrag = { change, _ ->
-                        onTouch(change.position.x, change.position.y, true)
+                        val x = change.position.x
+                        val y = change.position.y
+                        onTouch(x, y, true, size.width.toFloat(), size.height.toFloat())
+                        // Also notify edge drag for panel detection
+                        onEdgeDrag(x, y, size.width.toFloat(), size.height.toFloat())
                     },
                     onDragEnd = {
-                        onTouch(0f, 0f, false)
+                        onTouch(0f, 0f, false, size.width.toFloat(), size.height.toFloat())
                     },
                     onDragCancel = {
-                        onTouch(0f, 0f, false)
+                        onTouch(0f, 0f, false, size.width.toFloat(), size.height.toFloat())
                     }
                 )
             }
