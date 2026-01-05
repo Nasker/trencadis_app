@@ -9,7 +9,7 @@
     <option name="autoReloadType" value="NONE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="2a35c421-9cff-4068-b39d-6c27c8725208" name="Changes" comment="Looks nice with both cameras">
+    <list default="true" id="2a35c421-9cff-4068-b39d-6c27c8725208" name="Changes" comment="Acid modulation and psychedelic look all over, with controls too">
       <change beforePath="$PROJECT_DIR$/.gradle/8.13/executionHistory/executionHistory.bin" beforeDir="false" afterPath="$PROJECT_DIR$/.gradle/8.13/executionHistory/executionHistory.bin" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.gradle/8.13/executionHistory/executionHistory.lock" beforeDir="false" afterPath="$PROJECT_DIR$/.gradle/8.13/executionHistory/executionHistory.lock" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.gradle/8.13/fileHashes/fileHashes.bin" beforeDir="false" afterPath="$PROJECT_DIR$/.gradle/8.13/fileHashes/fileHashes.bin" afterDir="false" />
@@ -17,12 +17,8 @@
       <change beforePath="$PROJECT_DIR$/.gradle/8.13/fileHashes/resourceHashesCache.bin" beforeDir="false" afterPath="$PROJECT_DIR$/.gradle/8.13/fileHashes/resourceHashesCache.bin" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.gradle/buildOutputCleanup/buildOutputCleanup.lock" beforeDir="false" afterPath="$PROJECT_DIR$/.gradle/buildOutputCleanup/buildOutputCleanup.lock" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.gradle/file-system.probe" beforeDir="false" afterPath="$PROJECT_DIR$/.gradle/file-system.probe" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/.idea/deploymentTargetSelector.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/deploymentTargetSelector.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/app/src/main/java/com/example/trencadisapp/TrencadisViewModel.kt" beforeDir="false" afterPath="$PROJECT_DIR$/app/src/main/java/com/example/trencadisapp/TrencadisViewModel.kt" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/app/src/main/java/com/example/trencadisapp/ui/CubistCanvas.kt" beforeDir="false" afterPath="$PROJECT_DIR$/app/src/main/java/com/example/trencadisapp/ui/CubistCanvas.kt" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/app/src/main/java/com/example/trencadisapp/ui/TrencadisScreen.kt" beforeDir="false" afterPath="$PROJECT_DIR$/app/src/main/java/com/example/trencadisapp/ui/TrencadisScreen.kt" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/app/src/main/java/com/example/trencadisapp/ui/components/ControlPanels.kt" beforeDir="false" afterPath="$PROJECT_DIR$/app/src/main/java/com/example/trencadisapp/ui/components/ControlPanels.kt" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -32,7 +28,7 @@
   <component name="ClangdSettings">
     <option name="formatViaClangd" value="false" />
   </component>
-  <component name="ExecutionTargetManager" SELECTED_TARGET="device_and_snapshot_combo_box_target[DeviceId(pluginId=PhysicalDevice, isTemplate=false, identifier=serial=R92Y707279Z)]" />
+  <component name="ExecutionTargetManager" SELECTED_TARGET="device_and_snapshot_combo_box_target[DeviceId(pluginId=LocalEmulator, isTemplate=false, identifier=path=/home/oscarmartinez/.android/avd/Medium_Tablet.avd)]" />
   <component name="ExternalProjectsData">
     <projectState path="$PROJECT_DIR$">
       <ProjectState />
@@ -190,7 +186,15 @@
       <option name="project" value="LOCAL" />
       <updated>1767096603755</updated>
     </task>
-    <option name="localTasksCounter" value="4" />
+    <task id="LOCAL-00004" summary="Acid modulation and psychedelic look all over, with controls too">
+      <option name="closed" value="true" />
+      <created>1767547839129</created>
+      <option name="number" value="00004" />
+      <option name="presentableId" value="LOCAL-00004" />
+      <option name="project" value="LOCAL" />
+      <updated>1767547839129</updated>
+    </task>
+    <option name="localTasksCounter" value="5" />
     <servers />
   </component>
   <component name="Vcs.Log.Tabs.Properties">
@@ -208,19 +212,20 @@
     <MESSAGE value="Added Kotlin project startup" />
     <MESSAGE value="Proof of concept working" />
     <MESSAGE value="Looks nice with both cameras" />
-    <option name="LAST_COMMIT_MESSAGE" value="Looks nice with both cameras" />
+    <MESSAGE value="Acid modulation and psychedelic look all over, with controls too" />
+    <option name="LAST_COMMIT_MESSAGE" value="Acid modulation and psychedelic look all over, with controls too" />
   </component>
   <component name="play_dynamic_filters_status">
     <option name="appIdToCheckInfo">
       <map>
         <entry key="com.example.trencadisapp">
           <value>
-            <CheckInfo lastCheckTimestamp="1767046217268" />
+            <CheckInfo lastCheckTimestamp="1767547848802" />
           </value>
         </entry>
         <entry key="com.example.trencadisapp.test">
           <value>
-            <CheckInfo lastCheckTimestamp="1767046217269" />
+            <CheckInfo lastCheckTimestamp="1767547848800" />
           </value>
         </entry>
       </map>

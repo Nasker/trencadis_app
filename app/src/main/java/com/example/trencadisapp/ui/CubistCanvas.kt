@@ -7,7 +7,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.DrawScope
@@ -35,6 +34,18 @@ fun CubistCanvas(
 ) {
     // Create and remember the acid pattern generator
     val acidPattern = remember { AcidPattern() }
+    
+    // Pre-calculate and cache reusable Path objects for complex shapes
+    val trianglePath = remember { Path() }
+    val diamondPath = remember { Path() }
+    val hexPath = remember { Path() }
+    val starPath = remember { Path() }
+    
+    // Pre-calculated trig values for hexagon (6 points) and star (8 points)
+    val hexCos = remember { FloatArray(6) { cos((PI / 3 * it - PI / 2).toFloat()) } }
+    val hexSin = remember { FloatArray(6) { sin((PI / 3 * it - PI / 2).toFloat()) } }
+    val starCos = remember { FloatArray(8) { cos((PI / 4 * it - PI / 2).toFloat()) } }
+    val starSin = remember { FloatArray(8) { sin((PI / 4 * it - PI / 2).toFloat()) } }
     
     // Update pattern type when index changes
     remember(acidPatternIndex) {
@@ -108,14 +119,20 @@ fun CubistCanvas(
             val sortedPixels = grid.pixels.sortedBy { it.brightness }
             
             for (pixel in sortedPixels) {
-                drawCubistShape(
+                drawCubistShapeOptimized(
                     pixel = pixel,
                     blockWidth = blockWidth,
                     blockHeight = blockHeight,
-                    selectionMode = selectionMode,
-                    cutoffValue = cutoffValue,
                     acidPattern = acidPattern,
-                    acidModulation = acidModulation
+                    acidModulation = acidModulation,
+                    trianglePath = trianglePath,
+                    diamondPath = diamondPath,
+                    hexPath = hexPath,
+                    starPath = starPath,
+                    hexCos = hexCos,
+                    hexSin = hexSin,
+                    starCos = starCos,
+                    starSin = starSin
                 )
             }
             
@@ -131,14 +148,21 @@ fun CubistCanvas(
     }
 }
 
-private fun DrawScope.drawCubistShape(
+// Optimized version - no gradient brushes, reuses paths, uses pre-calculated trig
+private fun DrawScope.drawCubistShapeOptimized(
     pixel: PixelData,
     blockWidth: Float,
     blockHeight: Float,
-    selectionMode: PixelSelectionMode,
-    cutoffValue: Float,
     acidPattern: AcidPattern,
-    acidModulation: AcidModulation
+    acidModulation: AcidModulation,
+    trianglePath: Path,
+    diamondPath: Path,
+    hexPath: Path,
+    starPath: Path,
+    hexCos: FloatArray,
+    hexSin: FloatArray,
+    starCos: FloatArray,
+    starSin: FloatArray
 ) {
     val x = pixel.gridX * blockWidth + blockWidth / 2
     val y = pixel.gridY * blockHeight + blockHeight / 2
@@ -149,7 +173,7 @@ private fun DrawScope.drawCubistShape(
     // Map brightness to size multiplier (0-10 like original)
     val brightMap = brightness * 10f
     
-    // Get acid pattern angle for this pixel
+    // Get acid pattern angle for this pixel (only if enabled)
     val acidAngle = if (acidModulation.enabled) {
         acidPattern.getAnimatedAngle(pixel.gridX, pixel.gridY, acidModulation.animationSpeed)
     } else 0f
@@ -160,39 +184,45 @@ private fun DrawScope.drawCubistShape(
         hue = hue * (1f - acidModulation.hueAmount) + acidHue * acidModulation.hueAmount
     }
     
-    // More noticeable rotation based on hue + acid modulation
-    val rotationFactor = when (selectionMode) {
-        PixelSelectionMode.BRIGHTEST, PixelSelectionMode.CENTER -> 1.0f
-        else -> 0.6f
-    }
-    var rotation = (hue / 360f) * 90f * rotationFactor
+    // Rotation based on hue + acid modulation
+    var rotation = (hue / 360f) * 54f  // Simplified: always 0.6 factor, max 54 degrees
     
     // Add acid rotation modulation
     if (acidModulation.enabled && acidModulation.rotationAmount > 0f) {
         rotation += acidPattern.getRotationModulation(acidAngle, 90f * acidModulation.rotationAmount)
     }
     
-    // Boost saturation for psychedelic/cubist look
-    val hsv = FloatArray(3)
-    android.graphics.Color.RGBToHSV(
-        (pixel.red * 255).toInt(),
-        (pixel.green * 255).toInt(),
-        (pixel.blue * 255).toInt(),
-        hsv
-    )
-    
-    // Apply acid hue shift to HSV
-    if (acidModulation.enabled && acidModulation.hueAmount > 0f) {
-        hsv[0] = hue  // Use the modulated hue
-    }
-    
-    // Boost saturation (1.6x) and slightly increase value for vibrance
-    hsv[1] = (hsv[1] * 1.6f).coerceAtMost(1f)
-    hsv[2] = (hsv[2] * 1.1f).coerceAtMost(1f)
-    val boostedArgb = android.graphics.Color.HSVToColor(hsv)
-    
-    // Color with alpha - brighter pixels are more opaque for 3D depth effect
+    // OPTIMIZED: Skip HSV conversion when acid hue modulation is off
+    // Just boost saturation directly in RGB space (approximate but fast)
+    val r: Float
+    val g: Float
+    val b: Float
     var alpha = 0.5f + brightness * 0.45f
+    
+    if (acidModulation.enabled && acidModulation.hueAmount > 0f) {
+        // Need HSV for hue shift - use it
+        val hsv = floatArrayOf(hue, 0f, 0f)
+        android.graphics.Color.RGBToHSV(
+            (pixel.red * 255).toInt(),
+            (pixel.green * 255).toInt(),
+            (pixel.blue * 255).toInt(),
+            hsv
+        )
+        hsv[0] = hue
+        hsv[1] = (hsv[1] * 1.6f).coerceAtMost(1f)
+        hsv[2] = (hsv[2] * 1.1f).coerceAtMost(1f)
+        val boostedArgb = android.graphics.Color.HSVToColor(hsv)
+        r = android.graphics.Color.red(boostedArgb) / 255f
+        g = android.graphics.Color.green(boostedArgb) / 255f
+        b = android.graphics.Color.blue(boostedArgb) / 255f
+    } else {
+        // Fast path: approximate saturation boost in RGB
+        val avg = (pixel.red + pixel.green + pixel.blue) / 3f
+        val satBoost = 1.6f
+        r = (avg + (pixel.red - avg) * satBoost).coerceIn(0f, 1f)
+        g = (avg + (pixel.green - avg) * satBoost).coerceIn(0f, 1f)
+        b = (avg + (pixel.blue - avg) * satBoost).coerceIn(0f, 1f)
+    }
     
     // Apply acid alpha modulation
     if (acidModulation.enabled && acidModulation.alphaAmount > 0f) {
@@ -200,12 +230,7 @@ private fun DrawScope.drawCubistShape(
         alpha = alpha * (1f - acidModulation.alphaAmount) + acidAlpha * acidModulation.alphaAmount
     }
     
-    val color = Color(
-        android.graphics.Color.red(boostedArgb) / 255f,
-        android.graphics.Color.green(boostedArgb) / 255f,
-        android.graphics.Color.blue(boostedArgb) / 255f,
-        alpha
-    )
+    val color = Color(r, g, b, alpha)
     
     // Calculate acid size modulation
     val acidSizeMod = if (acidModulation.enabled && acidModulation.sizeAmount > 0f) {
@@ -216,143 +241,80 @@ private fun DrawScope.drawCubistShape(
     val baseSize = blockWidth.coerceAtMost(blockHeight)
     val baseShapeSize = baseSize * (0.5f + brightMap * 0.35f)
     val shapeSize = baseShapeSize * acidSizeMod
+    val halfSize = shapeSize / 2
     
-    // Determine shape type - use larger regions for coherence (divide by 4 to group shapes)
-    // This creates "zones" of similar shapes rather than per-pixel noise
-    val regionX = pixel.gridX / 4
-    val regionY = pixel.gridY / 4
-    val shapeSelector = if (acidModulation.enabled) {
-        // Slow morphing based on acid angle (divide by larger number for slower change)
-        ((regionX + regionY * 2 + (acidAngle / 5).toInt()) % 6).coerceIn(0, 5)
-    } else {
-        // Static regions based on position and hue band
-        ((regionX + regionY + (hue / 120).toInt()) % 6).coerceIn(0, 5)
-    }
-    
-    // Create gradient brush for psychedelic effect
-    val gradientBrush = if (acidModulation.enabled && acidModulation.hueAmount > 0.3f) {
-        // Complementary color for gradient
-        val complementHue = (hue + 180f) % 360f
-        val complementHsv = floatArrayOf(complementHue, hsv[1], hsv[2] * 0.8f)
-        val complementArgb = android.graphics.Color.HSVToColor(complementHsv)
-        val complementColor = Color(
-            android.graphics.Color.red(complementArgb) / 255f,
-            android.graphics.Color.green(complementArgb) / 255f,
-            android.graphics.Color.blue(complementArgb) / 255f,
-            alpha * 0.7f
-        )
-        
-        // Radial gradient from center
-        Brush.radialGradient(
-            colors = listOf(color, complementColor),
-            center = Offset(x, y),
-            radius = shapeSize
-        )
-    } else null
+    // Determine shape type - use larger regions for coherence
+    val effectiveShape = if (acidModulation.multiShape) {
+        val regionX = pixel.gridX / 4
+        val regionY = pixel.gridY / 4
+        if (acidModulation.enabled) {
+            ((regionX + regionY * 2 + (acidAngle / 5).toInt()) % 6).coerceIn(0, 5)
+        } else {
+            ((regionX + regionY + (hue / 120).toInt()) % 6).coerceIn(0, 5)
+        }
+    } else 0
     
     // Rotate around the shape's own center position using pivot
     rotate(degrees = rotation, pivot = Offset(x, y)) {
-        // If multiShape is off, always use rectangle (shapeSelector 0)
-        val effectiveShape = if (acidModulation.multiShape) shapeSelector else 0
         when (effectiveShape) {
             0 -> {
-                // Rectangle
-                if (gradientBrush != null) {
-                    drawRect(
-                        brush = gradientBrush,
-                        topLeft = Offset(x - shapeSize / 2, y - shapeSize / 2),
-                        size = Size(shapeSize, shapeSize)
-                    )
-                } else {
-                    drawRect(
-                        color = color,
-                        topLeft = Offset(x - shapeSize / 2, y - shapeSize / 2),
-                        size = Size(shapeSize, shapeSize)
-                    )
-                }
+                // Rectangle - fastest
+                drawRect(
+                    color = color,
+                    topLeft = Offset(x - halfSize, y - halfSize),
+                    size = Size(shapeSize, shapeSize)
+                )
             }
             1 -> {
                 // Ellipse/Circle
-                if (gradientBrush != null) {
-                    drawOval(
-                        brush = gradientBrush,
-                        topLeft = Offset(x - shapeSize / 2, y - shapeSize / 2),
-                        size = Size(shapeSize, shapeSize)
-                    )
-                } else {
-                    drawOval(
-                        color = color,
-                        topLeft = Offset(x - shapeSize / 2, y - shapeSize / 2),
-                        size = Size(shapeSize, shapeSize)
-                    )
-                }
+                drawOval(
+                    color = color,
+                    topLeft = Offset(x - halfSize, y - halfSize),
+                    size = Size(shapeSize, shapeSize)
+                )
             }
             2 -> {
-                // Triangle pointing up
-                val trianglePath = Path().apply {
-                    moveTo(x, y - shapeSize / 2)  // Top
-                    lineTo(x - shapeSize / 2, y + shapeSize / 2)  // Bottom left
-                    lineTo(x + shapeSize / 2, y + shapeSize / 2)  // Bottom right
-                    close()
-                }
-                if (gradientBrush != null) {
-                    drawPath(trianglePath, gradientBrush)
-                } else {
-                    drawPath(trianglePath, color)
-                }
+                // Triangle - reuse path
+                trianglePath.reset()
+                trianglePath.moveTo(x, y - halfSize)
+                trianglePath.lineTo(x - halfSize, y + halfSize)
+                trianglePath.lineTo(x + halfSize, y + halfSize)
+                trianglePath.close()
+                drawPath(trianglePath, color)
             }
             3 -> {
-                // Diamond
-                val diamondPath = Path().apply {
-                    moveTo(x, y - shapeSize / 2)  // Top
-                    lineTo(x + shapeSize / 2, y)  // Right
-                    lineTo(x, y + shapeSize / 2)  // Bottom
-                    lineTo(x - shapeSize / 2, y)  // Left
-                    close()
-                }
-                if (gradientBrush != null) {
-                    drawPath(diamondPath, gradientBrush)
-                } else {
-                    drawPath(diamondPath, color)
-                }
+                // Diamond - reuse path
+                diamondPath.reset()
+                diamondPath.moveTo(x, y - halfSize)
+                diamondPath.lineTo(x + halfSize, y)
+                diamondPath.lineTo(x, y + halfSize)
+                diamondPath.lineTo(x - halfSize, y)
+                diamondPath.close()
+                drawPath(diamondPath, color)
             }
             4 -> {
-                // Hexagon
-                val hexPath = Path().apply {
-                    val r = shapeSize / 2
-                    for (i in 0..5) {
-                        val angle = (PI / 3 * i - PI / 2).toFloat()
-                        val px = x + r * cos(angle)
-                        val py = y + r * sin(angle)
-                        if (i == 0) moveTo(px, py) else lineTo(px, py)
-                    }
-                    close()
+                // Hexagon - reuse path and pre-calculated trig
+                hexPath.reset()
+                val r = halfSize
+                hexPath.moveTo(x + r * hexCos[0], y + r * hexSin[0])
+                for (i in 1..5) {
+                    hexPath.lineTo(x + r * hexCos[i], y + r * hexSin[i])
                 }
-                if (gradientBrush != null) {
-                    drawPath(hexPath, gradientBrush)
-                } else {
-                    drawPath(hexPath, color)
-                }
+                hexPath.close()
+                drawPath(hexPath, color)
             }
             else -> {
-                // Star/Cross shape
-                val starPath = Path().apply {
-                    val outer = shapeSize / 2
-                    val inner = shapeSize / 4
-                    for (i in 0..7) {
-                        val r = if (i % 2 == 0) outer else inner
-                        val angle = (PI / 4 * i - PI / 2).toFloat()
-                        val px = x + r * cos(angle)
-                        val py = y + r * sin(angle)
-                        if (i == 0) moveTo(px, py) else lineTo(px, py)
-                    }
-                    close()
+                // Star - reuse path and pre-calculated trig
+                starPath.reset()
+                val outer = halfSize
+                val inner = halfSize / 2
+                starPath.moveTo(x + outer * starCos[0], y + outer * starSin[0])
+                for (i in 1..7) {
+                    val rad = if (i % 2 == 0) outer else inner
+                    starPath.lineTo(x + rad * starCos[i], y + rad * starSin[i])
                 }
-                if (gradientBrush != null) {
-                    drawPath(starPath, gradientBrush)
-                } else {
-                    drawPath(starPath, color)
-                }
+                starPath.close()
+                drawPath(starPath, color)
             }
         }
     }
