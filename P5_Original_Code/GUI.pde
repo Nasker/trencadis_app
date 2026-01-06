@@ -663,4 +663,3 @@ class MultiSlider extends Widget
     return false;
   }
 }
-
