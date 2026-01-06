@@ -31,7 +31,7 @@ fun CubistCanvas(
     acidPatternIndex: Int = 9,
     modifier: Modifier = Modifier,
     onTouch: (Float, Float, Boolean, Float, Float) -> Unit = { _, _, _, _, _ -> },
-    onDoubleTap: () -> Unit = {},
+    onDoubleTap: (Float, Float, Float, Float) -> Unit = { _, _, _, _ -> },
     onEdgeDrag: (Float, Float, Float, Float) -> Unit = { _, _, _, _ -> }
 ) {
     // Create and remember the acid pattern generator
@@ -65,7 +65,9 @@ fun CubistCanvas(
         modifier = modifier
             .pointerInput(Unit) {
                 detectTapGestures(
-                    onDoubleTap = { onDoubleTap() },
+                    onDoubleTap = { offset -> 
+                        onDoubleTap(offset.x, offset.y, size.width.toFloat(), size.height.toFloat()) 
+                    },
                     onPress = { offset ->
                         onTouch(offset.x, offset.y, true, size.width.toFloat(), size.height.toFloat())
                         tryAwaitRelease()

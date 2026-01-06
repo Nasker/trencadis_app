@@ -32,6 +32,7 @@ import com.example.trencadisapp.ui.components.KeysPanel
 import com.example.trencadisapp.ui.components.ModesPanel
 import com.example.trencadisapp.ui.components.ScalesPanel
 import com.example.trencadisapp.ui.components.SynthPanel
+import com.example.trencadisapp.ui.components.PresetPanel
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.isGranted
 import com.google.accompanist.permissions.rememberPermissionState
@@ -95,15 +96,41 @@ fun TrencadisScreen(
                 onTouch = { x, y, isTouching, canvasWidth, canvasHeight ->
                     viewModel.setTouch(x, y, isTouching, canvasWidth, canvasHeight)
                 },
-                onDoubleTap = {
-                    // Close all open panels
-                    viewModel.setModesPanel(false)
-                    viewModel.setScalesPanel(false)
-                    viewModel.setKeysPanel(false)
-                    viewModel.setSynthPanel(false)
-                    viewModel.setAcidPanel(false)
-                    // Toggle icons visibility
-                    iconsVisible = !iconsVisible
+                onDoubleTap = { x, y, width, height ->
+                    // Check if any panel is open
+                    val anyPanelOpen = state.showModesPanel || state.showScalesPanel || 
+                                       state.showKeysPanel || state.showSynthPanel || 
+                                       state.showAcidPanel || state.showPresetPanel
+                    
+                    if (anyPanelOpen) {
+                        // Check if tap is outside all panel areas
+                        val inModesArea = x < width * 0.35f && y < height * 0.5f
+                        val inScalesArea = y < height * 0.15f
+                        val inKeysArea = y > height * 0.7f && x > width * 0.1f && x < width * 0.9f
+                        val inSynthArea = x > width * 0.65f && y < height * 0.6f
+                        val inAcidArea = x < width * 0.35f && y > height * 0.5f
+                        val inPresetArea = x > width * 0.65f && y > height * 0.5f
+                        
+                        val inAnyPanelArea = (state.showModesPanel && inModesArea) ||
+                                             (state.showScalesPanel && inScalesArea) ||
+                                             (state.showKeysPanel && inKeysArea) ||
+                                             (state.showSynthPanel && inSynthArea) ||
+                                             (state.showAcidPanel && inAcidArea) ||
+                                             (state.showPresetPanel && inPresetArea)
+                        
+                        if (!inAnyPanelArea) {
+                            // Close all panels when double-tapping outside
+                            viewModel.setModesPanel(false)
+                            viewModel.setScalesPanel(false)
+                            viewModel.setKeysPanel(false)
+                            viewModel.setSynthPanel(false)
+                            viewModel.setAcidPanel(false)
+                            viewModel.setPresetPanel(false)
+                        }
+                    } else {
+                        // No panel open - toggle icons visibility
+                        iconsVisible = !iconsVisible
+                    }
                 },
                 onEdgeDrag = { x, y, width, height ->
                     // Left edge - modes panel (upper quarter)
@@ -112,10 +139,12 @@ fun TrencadisScreen(
                     viewModel.setScalesPanel(y < height * 0.05f)
                     // Bottom edge - keys panel
                     viewModel.setKeysPanel(y > height * 0.95f && x > width * 0.2f)
-                    // Right edge - synth panel
-                    viewModel.setSynthPanel(x > width * 0.95f)
+                    // Right edge upper - synth panel (upper half)
+                    viewModel.setSynthPanel(x > width * 0.95f && y < height * 0.5f)
                     // Left edge lower - acid panel (around 3/4 height)
                     viewModel.setAcidPanel(x < width * 0.1f && y > height * 0.6f && y < height * 0.9f)
+                    // Right edge lower - preset panel (around 3/4 height)
+                    viewModel.setPresetPanel(x > width * 0.9f && y > height * 0.6f && y < height * 0.9f)
                 }
             )
             
@@ -202,9 +231,27 @@ fun TrencadisScreen(
                 )
             }
             
+            // Preset Panel (Right edge, below synth)
+            AnimatedVisibility(
+                visible = state.showPresetPanel,
+                enter = slideInHorizontally(initialOffsetX = { it }) + fadeIn(),
+                exit = slideOutHorizontally(targetOffsetX = { it }) + fadeOut(),
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(bottom = 80.dp)
+            ) {
+                PresetPanel(
+                    presetNames = state.presetNames,
+                    onSavePreset = { viewModel.savePreset(it) },
+                    onLoadPreset = { viewModel.loadPreset(it) },
+                    onDeletePreset = { viewModel.deletePreset(it) }
+                )
+            }
+            
             // Touch hint indicators at edges - hide all icons when any panel is open
             val anyPanelOpen = state.showModesPanel || state.showScalesPanel || 
-                               state.showKeysPanel || state.showSynthPanel || state.showAcidPanel
+                               state.showKeysPanel || state.showSynthPanel || state.showAcidPanel ||
+                               state.showPresetPanel
             
             if (iconsVisible && !anyPanelOpen) {
                 EdgeHints(
@@ -212,7 +259,8 @@ fun TrencadisScreen(
                     onScalesClick = { viewModel.setScalesPanel(true) },
                     onKeysClick = { viewModel.setKeysPanel(true) },
                     onSynthClick = { viewModel.setSynthPanel(true) },
-                    onAcidClick = { viewModel.setAcidPanel(true) }
+                    onAcidClick = { viewModel.setAcidPanel(true) },
+                    onPresetClick = { viewModel.setPresetPanel(true) }
                 )
             }
             
@@ -319,11 +367,13 @@ private fun EdgeHints(
     onKeysClick: () -> Unit = {},
     onSynthClick: () -> Unit = {},
     onAcidClick: () -> Unit = {},
+    onPresetClick: () -> Unit = {},
     showModes: Boolean = true,
     showScales: Boolean = true,
     showKeys: Boolean = true,
     showSynth: Boolean = true,
-    showAcid: Boolean = true
+    showAcid: Boolean = true,
+    showPreset: Boolean = true
 ) {
     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
         val quarterHeight = maxHeight * 0.25f
@@ -373,14 +423,25 @@ private fun EdgeHints(
             )
         }
         
-        // Right hint - Synth (waveform ~)
+        // Right hint - Synth (waveform ~) at 1/4 height
         if (showSynth) {
             PanelIconButton(
                 icon = "∿",
                 modifier = Modifier
-                    .align(Alignment.CenterEnd)
-                    .padding(end = 8.dp),
+                    .align(Alignment.TopEnd)
+                    .padding(end = 8.dp, top = quarterHeight - 24.dp),
                 onClick = onSynthClick
+            )
+        }
+        
+        // Right hint - Presets (diskette) at 3/4 height
+        if (showPreset) {
+            PanelIconButton(
+                icon = "💾",
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(end = 8.dp, top = threeQuarterHeight - 24.dp),
+                onClick = onPresetClick
             )
         }
     }
