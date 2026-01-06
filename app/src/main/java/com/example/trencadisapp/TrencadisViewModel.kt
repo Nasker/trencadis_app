@@ -10,6 +10,8 @@ import com.example.trencadisapp.camera.PixelGrid
 import com.example.trencadisapp.camera.PixelSelectionMode
 import com.example.trencadisapp.ui.AcidModulation
 import com.example.trencadisapp.ui.AcidPattern
+import com.example.trencadisapp.preset.Preset
+import com.example.trencadisapp.preset.PresetManager
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -68,7 +70,9 @@ data class TrencadisState(
     val useFrontCamera: Boolean = false,
     val acidModulation: AcidModulation = AcidModulation(),
     val acidPatternIndex: Int = 9,  // Default to WAVE_INTERFERENCE (ACID)
-    val showAcidPanel: Boolean = false
+    val showAcidPanel: Boolean = false,
+    val showPresetPanel: Boolean = false,
+    val presetNames: List<String> = emptyList()
 )
 
 class TrencadisViewModel(application: Application) : AndroidViewModel(application) {
@@ -77,6 +81,7 @@ class TrencadisViewModel(application: Application) : AndroidViewModel(applicatio
     val state: StateFlow<TrencadisState> = _state.asStateFlow()
     
     private val pdEngine = PdAudioEngine(application)
+    private val presetManager = PresetManager(application)
     
     private var lastIp = 0f
     private var lastJp = 0f
@@ -87,6 +92,7 @@ class TrencadisViewModel(application: Application) : AndroidViewModel(applicatio
                 incrementSequenceIndex()
             }
         }
+        refreshPresetList()
     }
     
     fun initializeAudio() {
@@ -326,6 +332,50 @@ class TrencadisViewModel(application: Application) : AndroidViewModel(applicatio
     }
     
     fun setAcidPanel(show: Boolean) = _state.update { it.copy(showAcidPanel = show) }
+    
+    // Preset panel
+    fun setPresetPanel(show: Boolean) = _state.update { it.copy(showPresetPanel = show) }
+    
+    private fun refreshPresetList() {
+        _state.update { it.copy(presetNames = presetManager.getPresetNames()) }
+    }
+    
+    fun savePreset(name: String) {
+        val currentState = _state.value
+        val preset = Preset(
+            name = name,
+            synthState = currentState.synthState,
+            musicState = currentState.musicState,
+            acidModulation = currentState.acidModulation,
+            acidPatternIndex = currentState.acidPatternIndex,
+            selectionMode = currentState.selectionMode,
+            useFrontCamera = currentState.useFrontCamera
+        )
+        presetManager.savePreset(preset)
+        refreshPresetList()
+    }
+    
+    fun loadPreset(name: String) {
+        val preset = presetManager.loadPreset(name) ?: return
+        _state.update { 
+            it.copy(
+                synthState = preset.synthState,
+                musicState = preset.musicState,
+                acidModulation = preset.acidModulation,
+                acidPatternIndex = preset.acidPatternIndex,
+                selectionMode = preset.selectionMode,
+                useFrontCamera = preset.useFrontCamera
+            )
+        }
+        // Apply loaded state to audio engine
+        applySynthState(preset.synthState)
+        applyMusicState(preset.musicState)
+    }
+    
+    fun deletePreset(name: String) {
+        presetManager.deletePreset(name)
+        refreshPresetList()
+    }
     
     override fun onCleared() {
         super.onCleared()
