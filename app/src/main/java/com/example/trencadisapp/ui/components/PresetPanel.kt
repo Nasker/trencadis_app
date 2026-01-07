@@ -26,6 +26,7 @@ fun PresetPanel(
     onSavePreset: (String) -> Unit,
     onLoadPreset: (String) -> Unit,
     onDeletePreset: (String) -> Unit,
+    onSharePreset: (String) -> Unit,
     modifier: Modifier = Modifier
 ) {
     var presetName by remember { mutableStateOf("") }
@@ -152,6 +153,7 @@ fun PresetPanel(
                         name = name,
                         showDeleteConfirm = showDeleteConfirm == name,
                         onLoad = { onLoadPreset(name) },
+                        onShare = { onSharePreset(name) },
                         onDeleteClick = { showDeleteConfirm = name },
                         onDeleteConfirm = {
                             onDeletePreset(name)
@@ -170,6 +172,7 @@ private fun PresetItem(
     name: String,
     showDeleteConfirm: Boolean,
     onLoad: () -> Unit,
+    onShare: () -> Unit,
     onDeleteClick: () -> Unit,
     onDeleteConfirm: () -> Unit,
     onDeleteCancel: () -> Unit
@@ -230,20 +233,38 @@ private fun PresetItem(
                 modifier = Modifier.weight(1f)
             )
             
-            // Delete button
-            Box(
-                modifier = Modifier
-                    .size(24.dp)
-                    .clip(RoundedCornerShape(4.dp))
-                    .background(Color(0xFF5A3A3A))
-                    .clickable(onClick = onDeleteClick),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    text = "✕",
-                    color = Color(0xFFFF6B6B),
-                    fontSize = 12.sp
-                )
+            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                // Share button
+                Box(
+                    modifier = Modifier
+                        .size(24.dp)
+                        .clip(RoundedCornerShape(4.dp))
+                        .background(Color(0xFF3A4A5A))
+                        .clickable(onClick = onShare),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = "↗",
+                        color = Color(0xFF6BB6FF),
+                        fontSize = 14.sp
+                    )
+                }
+                
+                // Delete button
+                Box(
+                    modifier = Modifier
+                        .size(24.dp)
+                        .clip(RoundedCornerShape(4.dp))
+                        .background(Color(0xFF5A3A3A))
+                        .clickable(onClick = onDeleteClick),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = "✕",
+                        color = Color(0xFFFF6B6B),
+                        fontSize = 12.sp
+                    )
+                }
             }
         }
     }

@@ -1,0 +1,42 @@
+{
+  "name": "Ambient Pad",
+  "version": 1,
+  "synth": {
+    "subOsc": true,
+    "sinOsc": true,
+    "sawOsc": false,
+    "sqrOsc": false,
+    "noiseOsc": false,
+    "cutoff": 0.5,
+    "resonance": 0.1,
+    "envelope": 0.0,
+    "attack": 0.6,
+    "release": 0.8,
+    "distortion": 0.0,
+    "fm": 0.1,
+    "fmAmount": 0.2,
+    "chorusFreq": 0.3,
+    "chorusMod": 0.4,
+    "delayFigure": 3.0,
+    "feedback": 0.4
+  },
+  "music": {
+    "scaleIndex": 5,
+    "keyIndex": 7,
+    "octaveIndex": 3,
+    "figureIndex": 1,
+    "tempo": 70.0
+  },
+  "acid": {
+    "enabled": true,
+    "multiShape": false,
+    "hueAmount": 0.3,
+    "sizeAmount": 0.2,
+    "rotationAmount": 0.2,
+    "alphaAmount": 0.4,
+    "animationSpeed": 0.05
+  },
+  "acidPatternIndex": 2,
+  "selectionMode": "CENTER",
+  "useFrontCamera": false
+}

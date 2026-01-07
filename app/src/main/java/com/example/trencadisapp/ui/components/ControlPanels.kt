@@ -457,7 +457,7 @@ fun SynthPanel(
         SynthSlider("Delay", synthState.delayFigure, -2f, 4f) { newValue ->
             onSynthStateChange { s -> s.copy(delayFigure = newValue) }
         }
-        SynthSlider("Feedback", synthState.feedback) { newValue ->
+        SynthSlider("Feedback", synthState.feedback, 0f, 0.49f) { newValue ->
             onSynthStateChange { s -> s.copy(feedback = newValue) }
         }
     }

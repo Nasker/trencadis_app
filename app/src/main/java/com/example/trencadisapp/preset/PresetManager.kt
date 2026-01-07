@@ -1,12 +1,16 @@
 package com.example.trencadisapp.preset
 
 import android.content.Context
+import android.content.Intent
+import android.net.Uri
+import androidx.core.content.FileProvider
 import com.example.trencadisapp.SynthState
 import com.example.trencadisapp.MusicState
 import com.example.trencadisapp.camera.PixelSelectionMode
 import com.example.trencadisapp.ui.AcidModulation
 import org.json.JSONObject
 import java.io.File
+import kotlin.math.round
 
 /**
  * Data class representing a complete preset with all saveable settings
@@ -20,6 +24,8 @@ data class Preset(
     val selectionMode: PixelSelectionMode,
     val useFrontCamera: Boolean
 ) {
+    private fun Float.round2(): Double = (round(this * 100) / 100).toDouble()
+    
     fun toJson(): JSONObject {
         return JSONObject().apply {
             put("name", name)
@@ -32,18 +38,18 @@ data class Preset(
                 put("sawOsc", synthState.sawOsc)
                 put("sqrOsc", synthState.sqrOsc)
                 put("noiseOsc", synthState.noiseOsc)
-                put("cutoff", synthState.cutoff.toDouble())
-                put("resonance", synthState.resonance.toDouble())
-                put("envelope", synthState.envelope.toDouble())
-                put("attack", synthState.attack.toDouble())
-                put("release", synthState.release.toDouble())
-                put("distortion", synthState.distortion.toDouble())
-                put("fm", synthState.fm.toDouble())
-                put("fmAmount", synthState.fmAmount.toDouble())
-                put("chorusFreq", synthState.chorusFreq.toDouble())
-                put("chorusMod", synthState.chorusMod.toDouble())
-                put("delayFigure", synthState.delayFigure.toDouble())
-                put("feedback", synthState.feedback.toDouble())
+                put("cutoff", synthState.cutoff.round2())
+                put("resonance", synthState.resonance.round2())
+                put("envelope", synthState.envelope.round2())
+                put("attack", synthState.attack.round2())
+                put("release", synthState.release.round2())
+                put("distortion", synthState.distortion.round2())
+                put("fm", synthState.fm.round2())
+                put("fmAmount", synthState.fmAmount.round2())
+                put("chorusFreq", synthState.chorusFreq.round2())
+                put("chorusMod", synthState.chorusMod.round2())
+                put("delayFigure", synthState.delayFigure.round2())
+                put("feedback", synthState.feedback.round2())
             })
             
             // Music state
@@ -52,18 +58,18 @@ data class Preset(
                 put("keyIndex", musicState.keyIndex)
                 put("octaveIndex", musicState.octaveIndex)
                 put("figureIndex", musicState.figureIndex)
-                put("tempo", musicState.tempo.toDouble())
+                put("tempo", musicState.tempo.round2())
             })
             
             // Acid modulation
             put("acid", JSONObject().apply {
                 put("enabled", acidModulation.enabled)
                 put("multiShape", acidModulation.multiShape)
-                put("hueAmount", acidModulation.hueAmount.toDouble())
-                put("sizeAmount", acidModulation.sizeAmount.toDouble())
-                put("rotationAmount", acidModulation.rotationAmount.toDouble())
-                put("alphaAmount", acidModulation.alphaAmount.toDouble())
-                put("animationSpeed", acidModulation.animationSpeed.toDouble())
+                put("hueAmount", acidModulation.hueAmount.round2())
+                put("sizeAmount", acidModulation.sizeAmount.round2())
+                put("rotationAmount", acidModulation.rotationAmount.round2())
+                put("alphaAmount", acidModulation.alphaAmount.round2())
+                put("animationSpeed", acidModulation.animationSpeed.round2())
             })
             
             put("acidPatternIndex", acidPatternIndex)
@@ -97,7 +103,7 @@ data class Preset(
                     chorusFreq = synth.optDouble("chorusFreq", 0.0).toFloat(),
                     chorusMod = synth.optDouble("chorusMod", 0.0).toFloat(),
                     delayFigure = synth.optDouble("delayFigure", 1.0).toFloat(),
-                    feedback = synth.optDouble("feedback", 0.5).toFloat()
+                    feedback = synth.optDouble("feedback", 0.4).toFloat().coerceAtMost(0.49f)
                 ),
                 musicState = MusicState(
                     scaleIndex = music.optInt("scaleIndex", 8),
@@ -213,5 +219,72 @@ class PresetManager(private val context: Context) {
         return name.replace(Regex("[^a-zA-Z0-9_-]"), "_")
             .take(50)
             .ifEmpty { "preset" }
+    }
+    
+    /**
+     * Get the JSON content of a preset for sharing
+     */
+    fun getPresetJson(name: String): String? {
+        return try {
+            val fileName = sanitizeFileName(name) + ".json"
+            val file = File(presetsDir, fileName)
+            if (file.exists()) file.readText() else null
+        } catch (e: Exception) {
+            e.printStackTrace()
+            null
+        }
+    }
+    
+    /**
+     * Create a share intent for a preset
+     */
+    fun createShareIntent(name: String): Intent? {
+        return try {
+            val fileName = sanitizeFileName(name) + ".json"
+            val file = File(presetsDir, fileName)
+            if (!file.exists()) return null
+            
+            val uri = FileProvider.getUriForFile(
+                context,
+                "${context.packageName}.fileprovider",
+                file
+            )
+            
+            Intent(Intent.ACTION_SEND).apply {
+                type = "application/json"
+                putExtra(Intent.EXTRA_STREAM, uri)
+                putExtra(Intent.EXTRA_SUBJECT, "Trencadís Preset: $name")
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+            null
+        }
+    }
+    
+    /**
+     * Copy bundled presets from assets to internal storage on first launch
+     */
+    fun copyBundledPresetsIfNeeded() {
+        try {
+            val assetManager = context.assets
+            val bundledPresets = assetManager.list("presets") ?: emptyArray()
+            
+            for (presetFile in bundledPresets) {
+                if (presetFile.endsWith(".json")) {
+                    val targetFile = File(presetsDir, presetFile)
+                    // Only copy if doesn't exist (don't overwrite user modifications)
+                    if (!targetFile.exists()) {
+                        assetManager.open("presets/$presetFile").use { input ->
+                            targetFile.outputStream().use { output ->
+                                input.copyTo(output)
+                            }
+                        }
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
     }
 }

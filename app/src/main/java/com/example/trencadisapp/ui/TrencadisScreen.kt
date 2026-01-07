@@ -1,6 +1,7 @@
 package com.example.trencadisapp.ui
 
 import android.Manifest
+import android.content.Intent
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.Preview
@@ -244,7 +245,12 @@ fun TrencadisScreen(
                     presetNames = state.presetNames,
                     onSavePreset = { viewModel.savePreset(it) },
                     onLoadPreset = { viewModel.loadPreset(it) },
-                    onDeletePreset = { viewModel.deletePreset(it) }
+                    onDeletePreset = { viewModel.deletePreset(it) },
+                    onSharePreset = { name ->
+                        viewModel.getShareIntent(name)?.let { intent ->
+                            context.startActivity(Intent.createChooser(intent, "Share Preset"))
+                        }
+                    }
                 )
             }
             

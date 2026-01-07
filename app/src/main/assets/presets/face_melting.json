@@ -1,0 +1,42 @@
+{
+  "name": "face melting",
+  "version": 1,
+  "synth": {
+    "subOsc": true,
+    "sinOsc": false,
+    "sawOsc": true,
+    "sqrOsc": false,
+    "noiseOsc": true,
+    "cutoff": 0.16049382090568542,
+    "resonance": 0.28287461400032043,
+    "envelope": 0.6727828979492188,
+    "attack": 0.536697268486023,
+    "release": 0.20948012173175812,
+    "distortion": 0.14525993168354034,
+    "fm": 0.1513761430978775,
+    "fmAmount": 0.4051987826824188,
+    "chorusFreq": 0.15749235451221466,
+    "chorusMod": 0.319571852684021,
+    "delayFigure": 3.247706413269043,
+    "feedback": 0.16049382090568542
+  },
+  "music": {
+    "scaleIndex": 8,
+    "keyIndex": 2,
+    "octaveIndex": 1,
+    "figureIndex": 1,
+    "tempo": 120
+  },
+  "acid": {
+    "enabled": false,
+    "multiShape": false,
+    "hueAmount": 0.5,
+    "sizeAmount": 0.30000001192092896,
+    "rotationAmount": 0.5,
+    "alphaAmount": 0.20000000298023224,
+    "animationSpeed": 0.5
+  },
+  "acidPatternIndex": 9,
+  "selectionMode": "POINTER",
+  "useFrontCamera": true
+}
