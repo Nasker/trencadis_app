@@ -1,0 +1,42 @@
+{
+  "name": "ringingtrip",
+  "version": 1,
+  "synth": {
+    "subOsc": false,
+    "sinOsc": true,
+    "sawOsc": false,
+    "sqrOsc": false,
+    "noiseOsc": true,
+    "cutoff": 0.38685014843940735,
+    "resonance": 0.3318042755126953,
+    "envelope": 0.0183485746383667,
+    "attack": 0.07186544686555862,
+    "release": 0.23456789553165436,
+    "distortion": 0,
+    "fm": 0.5581039786338806,
+    "fmAmount": 0.08024691045284271,
+    "chorusFreq": 0.15749235451221466,
+    "chorusMod": 0.37461772561073303,
+    "delayFigure": -1.4814814329147339,
+    "feedback": 0.37037035822868347
+  },
+  "music": {
+    "scaleIndex": 7,
+    "keyIndex": 4,
+    "octaveIndex": 3,
+    "figureIndex": 4,
+    "tempo": 65.28836059570312
+  },
+  "acid": {
+    "enabled": true,
+    "multiShape": false,
+    "hueAmount": 0.5,
+    "sizeAmount": 0.30000001192092896,
+    "rotationAmount": 0.5,
+    "alphaAmount": 0.20000000298023224,
+    "animationSpeed": 0.3783482611179352
+  },
+  "acidPatternIndex": 3,
+  "selectionMode": "BRIGHTEST",
+  "useFrontCamera": true
+}

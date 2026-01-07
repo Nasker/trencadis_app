@@ -1,0 +1,42 @@
+{
+  "name": "Acid Trip",
+  "version": 1,
+  "synth": {
+    "subOsc": true,
+    "sinOsc": false,
+    "sawOsc": true,
+    "sqrOsc": false,
+    "noiseOsc": false,
+    "cutoff": 0.4,
+    "resonance": 0.6,
+    "envelope": 0.5,
+    "attack": 0.0,
+    "release": 0.3,
+    "distortion": 0.2,
+    "fm": 0.0,
+    "fmAmount": 0.0,
+    "chorusFreq": 0.0,
+    "chorusMod": 0.0,
+    "delayFigure": 1.0,
+    "feedback": 0.1
+  },
+  "music": {
+    "scaleIndex": 10,
+    "keyIndex": 5,
+    "octaveIndex": 1,
+    "figureIndex": 4,
+    "tempo": 130.0
+  },
+  "acid": {
+    "enabled": true,
+    "multiShape": true,
+    "hueAmount": 0.7,
+    "sizeAmount": 0.5,
+    "rotationAmount": 0.6,
+    "alphaAmount": 0.3,
+    "animationSpeed": 0.15
+  },
+  "acidPatternIndex": 5,
+  "selectionMode": "SEQUENCE",
+  "useFrontCamera": false
+}

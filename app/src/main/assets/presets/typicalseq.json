@@ -1,0 +1,42 @@
+{
+  "name": "typicalseq",
+  "version": 1,
+  "synth": {
+    "subOsc": true,
+    "sinOsc": false,
+    "sawOsc": false,
+    "sqrOsc": true,
+    "noiseOsc": false,
+    "cutoff": 0.4266054928302765,
+    "resonance": 0.5550458431243896,
+    "envelope": 0,
+    "attack": 0,
+    "release": 0.24382716417312622,
+    "distortion": 0,
+    "fm": 0.0555555559694767,
+    "fmAmount": 0.23088684678077698,
+    "chorusFreq": 0,
+    "chorusMod": 0,
+    "delayFigure": -0.24770641326904297,
+    "feedback": 0.1819571852684021
+  },
+  "music": {
+    "scaleIndex": 10,
+    "keyIndex": 9,
+    "octaveIndex": 3,
+    "figureIndex": 3,
+    "tempo": 120
+  },
+  "acid": {
+    "enabled": false,
+    "multiShape": false,
+    "hueAmount": 0.5,
+    "sizeAmount": 0.30000001192092896,
+    "rotationAmount": 0.5,
+    "alphaAmount": 0.20000000298023224,
+    "animationSpeed": 0.5
+  },
+  "acidPatternIndex": 9,
+  "selectionMode": "SEQUENCE",
+  "useFrontCamera": false
+}

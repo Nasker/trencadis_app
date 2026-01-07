@@ -1,6 +1,7 @@
 package com.example.trencadisapp
 
 import android.app.Application
+import android.content.Intent
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.trencadisapp.audio.MusicConstants
@@ -37,7 +38,7 @@ data class SynthState(
     val chorusFreq: Float = 0f,
     val chorusMod: Float = 0f,
     val delayFigure: Float = 1f,
-    val feedback: Float = 0.5f
+    val feedback: Float = 0.4f
 )
 
 data class MusicState(
@@ -92,6 +93,8 @@ class TrencadisViewModel(application: Application) : AndroidViewModel(applicatio
                 incrementSequenceIndex()
             }
         }
+        // Copy bundled presets on first launch
+        presetManager.copyBundledPresetsIfNeeded()
         refreshPresetList()
     }
     
@@ -370,11 +373,17 @@ class TrencadisViewModel(application: Application) : AndroidViewModel(applicatio
         // Apply loaded state to audio engine
         applySynthState(preset.synthState)
         applyMusicState(preset.musicState)
+        // Apply selection mode to sequencer
+        setSelectionMode(preset.selectionMode)
     }
     
     fun deletePreset(name: String) {
         presetManager.deletePreset(name)
         refreshPresetList()
+    }
+    
+    fun getShareIntent(name: String): Intent? {
+        return presetManager.createShareIntent(name)
     }
     
     override fun onCleared() {
