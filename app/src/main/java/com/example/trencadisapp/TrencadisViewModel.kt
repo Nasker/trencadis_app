@@ -2,6 +2,9 @@ package com.example.trencadisapp
 
 import android.app.Application
 import android.content.Intent
+import android.os.Build
+import android.util.DisplayMetrics
+import android.view.WindowManager
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.trencadisapp.audio.MusicConstants
@@ -11,6 +14,7 @@ import com.example.trencadisapp.camera.PixelGrid
 import com.example.trencadisapp.camera.PixelSelectionMode
 import com.example.trencadisapp.ui.AcidModulation
 import com.example.trencadisapp.ui.AcidPattern
+import com.example.trencadisapp.ui.BlobModulation
 import com.example.trencadisapp.preset.Preset
 import com.example.trencadisapp.preset.PresetManager
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -55,7 +59,7 @@ data class TrencadisState(
     val selectedPixel: PixelData? = null,
     val selectionMode: PixelSelectionMode = PixelSelectionMode.SEQUENCE,
     val sequenceIndex: Int = 0,
-    val blockSize: Int = 8,
+    val blockSize: Int = 120,
     val synthState: SynthState = SynthState(),
     val musicState: MusicState = MusicState(),
     val touchX: Float = 0f,
@@ -72,8 +76,12 @@ data class TrencadisState(
     val acidModulation: AcidModulation = AcidModulation(),
     val acidPatternIndex: Int = 9,  // Default to WAVE_INTERFERENCE (ACID)
     val showAcidPanel: Boolean = false,
+    val showBlobPanel: Boolean = false,
     val showPresetPanel: Boolean = false,
-    val presetNames: List<String> = emptyList()
+    val presetNames: List<String> = emptyList(),
+    val screenAspectRatio: Float = 9f / 16f,  // width/height, updated once canvas is measured
+    val useBlobMode: Boolean = false,
+    val blobModulation: BlobModulation = BlobModulation()
 )
 
 class TrencadisViewModel(application: Application) : AndroidViewModel(application) {
@@ -88,6 +96,23 @@ class TrencadisViewModel(application: Application) : AndroidViewModel(applicatio
     private var lastJp = 0f
     
     init {
+        // Read true hardware screen dimensions to get an accurate aspect ratio.
+        // Compose's onGloballyPositioned under-reports height (insets not included)
+        // which makes the ratio appear wider than reality.
+        val wm = application.getSystemService(WindowManager::class.java)
+        val realRatio: Float = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            val bounds = wm.currentWindowMetrics.bounds
+            bounds.width().toFloat() / bounds.height().toFloat()
+        } else {
+            @Suppress("DEPRECATION")
+            val dm = DisplayMetrics()
+            @Suppress("DEPRECATION")
+            wm.defaultDisplay.getRealMetrics(dm)
+            dm.widthPixels.toFloat() / dm.heightPixels.toFloat()
+        }
+        android.util.Log.d("TrencadisAR", "init hardware ratio=$realRatio (${if (realRatio < 1f) "portrait" else "landscape"})")
+        _state.update { it.copy(screenAspectRatio = realRatio) }
+
         pdEngine.setOnBangReceived {
             viewModelScope.launch {
                 incrementSequenceIndex()
@@ -212,10 +237,10 @@ class TrencadisViewModel(application: Application) : AndroidViewModel(applicatio
         _state.update { it.copy(selectionMode = mode) }
         
         val newBlockSize = when (mode) {
-            PixelSelectionMode.SEQUENCE -> 15
-            PixelSelectionMode.BRIGHTEST -> 12
-            PixelSelectionMode.CENTER -> 15
-            PixelSelectionMode.POINTER -> 12
+            PixelSelectionMode.SEQUENCE -> 60
+            PixelSelectionMode.BRIGHTEST -> 50
+            PixelSelectionMode.CENTER -> 60
+            PixelSelectionMode.POINTER -> 50
         }
         _state.update { it.copy(blockSize = newBlockSize) }
         
@@ -322,6 +347,13 @@ class TrencadisViewModel(application: Application) : AndroidViewModel(applicatio
     
     // Camera selection
     fun toggleCamera() = _state.update { it.copy(useFrontCamera = !it.useFrontCamera) }
+    fun toggleBlobMode() = _state.update { it.copy(useBlobMode = !it.useBlobMode) }
+
+    fun updateScreenAspectRatio(width: Float, height: Float) {
+        if (width > 0f && height > 0f) {
+            _state.update { it.copy(screenAspectRatio = width / height) }
+        }
+    }
     
     // Acid pattern controls
     fun toggleAcid() = _state.update { 
@@ -335,9 +367,13 @@ class TrencadisViewModel(application: Application) : AndroidViewModel(applicatio
     }
     
     fun setAcidPanel(show: Boolean) = _state.update { it.copy(showAcidPanel = show) }
+    fun setBlobPanel(show: Boolean) = _state.update { it.copy(showBlobPanel = show) }
     
     // Preset panel
     fun setPresetPanel(show: Boolean) = _state.update { it.copy(showPresetPanel = show) }
+
+    fun updateBlobModulation(update: (BlobModulation) -> BlobModulation) =
+        _state.update { it.copy(blobModulation = update(it.blobModulation)) }
     
     private fun refreshPresetList() {
         _state.update { it.copy(presetNames = presetManager.getPresetNames()) }
@@ -352,7 +388,9 @@ class TrencadisViewModel(application: Application) : AndroidViewModel(applicatio
             acidModulation = currentState.acidModulation,
             acidPatternIndex = currentState.acidPatternIndex,
             selectionMode = currentState.selectionMode,
-            useFrontCamera = currentState.useFrontCamera
+            useFrontCamera = currentState.useFrontCamera,
+            useBlobMode = currentState.useBlobMode,
+            blobModulation = currentState.blobModulation
         )
         presetManager.savePreset(preset)
         refreshPresetList()
@@ -367,7 +405,9 @@ class TrencadisViewModel(application: Application) : AndroidViewModel(applicatio
                 acidModulation = preset.acidModulation,
                 acidPatternIndex = preset.acidPatternIndex,
                 selectionMode = preset.selectionMode,
-                useFrontCamera = preset.useFrontCamera
+                useFrontCamera = preset.useFrontCamera,
+                useBlobMode = preset.useBlobMode,
+                blobModulation = preset.blobModulation
             )
         }
         // Apply loaded state to audio engine

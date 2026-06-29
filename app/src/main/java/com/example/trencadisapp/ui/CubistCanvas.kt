@@ -10,6 +10,7 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.input.pointer.pointerInput
@@ -17,6 +18,7 @@ import androidx.compose.runtime.remember
 import kotlin.math.cos
 import com.example.trencadisapp.camera.PixelData
 import com.example.trencadisapp.camera.PixelGrid
+import com.example.trencadisapp.camera.BlobDetector
 import com.example.trencadisapp.camera.PixelSelectionMode
 import kotlin.math.PI
 import kotlin.math.sin
@@ -26,6 +28,7 @@ fun CubistCanvas(
     pixelGrid: PixelGrid?,
     selectedPixel: PixelData?,
     selectionMode: PixelSelectionMode,
+    blobModulation: BlobModulation? = null,
     cutoffValue: Float,
     acidModulation: AcidModulation = AcidModulation(),
     acidPatternIndex: Int = 9,
@@ -121,28 +124,59 @@ fun CubistCanvas(
         
         // Draw pixel grid - sorted by brightness (dark first, bright on top for 3D effect)
         pixelGrid?.let { grid ->
+            // Fill the whole canvas. The camera image is center-cropped to the grid
+            // aspect ratio in CameraPixelAnalyzer, so image content is undistorted.
+            // Shape geometry stays square via the geometric-mean baseSize, so circles
+            // remain round even with sub-pixel cell rounding.
             val blockWidth = canvasWidth / grid.cols
             val blockHeight = canvasHeight / grid.rows
             
-            // Sort pixels by brightness: dark pixels drawn first (back), bright pixels last (front)
+            // Sort pixels by effective brightness: dark/smaller shapes drawn first (back),
+            // bright/larger shapes drawn last (front). This preserves the fake 3D depth
+            // effect even when brightnessSizeBoost makes bright shapes much larger.
             val sortedPixels = grid.pixels.sortedBy { it.brightness }
             
-            for (pixel in sortedPixels) {
-                drawCubistShapeOptimized(
-                    pixel = pixel,
-                    blockWidth = blockWidth,
-                    blockHeight = blockHeight,
-                    acidPattern = acidPattern,
-                    acidModulation = acidModulation,
-                    trianglePath = trianglePath,
-                    diamondPath = diamondPath,
-                    hexPath = hexPath,
-                    starPath = starPath,
-                    hexCos = hexCos,
-                    hexSin = hexSin,
-                    starCos = starCos,
-                    starSin = starSin
-                )
+            fun drawTilesAt(alphaScale: Float) {
+                val mod = if (alphaScale == 1f) acidModulation
+                          else acidModulation.copy(alphaAmount = acidModulation.alphaAmount * alphaScale)
+                for (pixel in sortedPixels) {
+                    drawCubistShapeOptimized(
+                        pixel = pixel,
+                        blockWidth = blockWidth,
+                        blockHeight = blockHeight,
+                        acidPattern = acidPattern,
+                        acidModulation = mod,
+                        trianglePath = trianglePath,
+                        diamondPath = diamondPath,
+                        hexPath = hexPath,
+                        starPath = starPath,
+                        hexCos = hexCos,
+                        hexSin = hexSin,
+                        starCos = starCos,
+                        starSin = starSin
+                    )
+                }
+            }
+
+            if (blobModulation != null && grid.blobs.isNotEmpty()) {
+                val sortedBlobs = grid.blobs.sortedBy { it.averageColor.brightness }
+                if (blobModulation.blobsOnTop) {
+                    // Tiles at reduced opacity as background texture, then blobs on top.
+                    // tileOverlayAlpha = 0 means skip tiles entirely (fastest path).
+                    val overlay = blobModulation.tileOverlayAlpha
+                    if (overlay > 0f) drawTilesAt(overlay)
+                    for (blob in sortedBlobs) {
+                        drawBlobPolygon(blob, blockWidth, blockHeight, blobModulation, acidPattern, acidModulation)
+                    }
+                } else {
+                    // Blobs as background, tiles at full opacity on top.
+                    for (blob in sortedBlobs) {
+                        drawBlobPolygon(blob, blockWidth, blockHeight, blobModulation, acidPattern, acidModulation)
+                    }
+                    drawTilesAt(1f)
+                }
+            } else {
+                drawTilesAt(1f)
             }
             
             // Draw selected pixel highlight
@@ -246,9 +280,13 @@ private fun DrawScope.drawCubistShapeOptimized(
         acidPattern.getSizeModulation(acidAngle, acidModulation.sizeAmount)
     } else 1f
     
-    // Calculate shape size
-    val baseSize = blockWidth.coerceAtMost(blockHeight)
-    val baseShapeSize = baseSize * (0.5f + brightMap * 0.35f)
+    // Use geometric mean so shapes appear square even when integer grid rounding
+    // makes blockWidth and blockHeight differ by a pixel or two.
+    val baseSize = kotlin.math.sqrt(blockWidth * blockHeight)
+    // Brightness → size: a configurable boost. Negative values are clamped to 0.
+    // Range: 0.5 baseline → up to (0.5 + 10 * boost) at max brightness.
+    val sizeBoost = acidModulation.brightnessSizeBoost.coerceAtLeast(0f)
+    val baseShapeSize = baseSize * (0.5f + brightMap * sizeBoost)
     val shapeSize = baseShapeSize * acidSizeMod
     val halfSize = shapeSize / 2
     
@@ -326,6 +364,72 @@ private fun DrawScope.drawCubistShapeOptimized(
                 drawPath(starPath, color)
             }
         }
+    }
+}
+
+private fun DrawScope.drawBlobPolygon(
+    blob: BlobDetector.PixelBlob,
+    blockWidth: Float,
+    blockHeight: Float,
+    blobModulation: BlobModulation?,
+    acidPattern: AcidPattern,
+    acidModulation: AcidModulation
+) {
+    if (blob.hull.size < 3) return
+
+    val avg = blob.averageColor
+    val baseColor = Color(avg.red, avg.green, avg.blue, 1f)
+
+    // Contract each hull vertex toward the blob centroid.
+    // This leaves a grout gap (~12% of cell size) so adjacent blobs never overlap.
+    val shrink = 0.88f
+    val cx = blob.center.x
+    val cy = blob.center.y
+
+    // Build the polygon path from the shrunk hull, converting to canvas coordinates.
+    val path = Path()
+    val first = blob.hull[0]
+    val fx = (cx + (first.x - cx) * shrink) * blockWidth
+    val fy = (cy + (first.y - cy) * shrink) * blockHeight
+    path.moveTo(fx, fy)
+    for (i in 1 until blob.hull.size) {
+        val pt = blob.hull[i]
+        path.lineTo(
+            (cx + (pt.x - cx) * shrink) * blockWidth,
+            (cy + (pt.y - cy) * shrink) * blockHeight
+        )
+    }
+    path.close()
+
+    val acidAngle = if (acidModulation.enabled) {
+        acidPattern.getAnimatedAngle(blob.center.x.toInt(), blob.center.y.toInt(), acidModulation.animationSpeed)
+    } else 0f
+
+    val acidHue = if (acidModulation.enabled && acidModulation.hueAmount > 0f) {
+        acidPattern.getHueModulation(acidAngle) * acidModulation.hueAmount
+    } else 0f
+
+    val blobAlpha = blobModulation?.blobAlpha?.coerceIn(0f, 1f) ?: 0.95f
+
+    val fillColor = if (acidModulation.enabled && acidModulation.hueAmount > 0f) {
+        // Shift hue slightly by acid pattern
+        val shifted = baseColor.copy(
+            red = (baseColor.red + acidHue / 360f).coerceIn(0f, 1f),
+            green = (baseColor.green + acidHue / 720f).coerceIn(0f, 1f),
+            blue = (baseColor.blue - acidHue / 720f).coerceIn(0f, 1f)
+        )
+        shifted.copy(alpha = blobAlpha)
+    } else {
+        baseColor.copy(alpha = blobAlpha)
+    }
+
+    drawPath(path = path, color = fillColor)
+
+    // Dark outline to reinforce the mosaic/cubist edges
+    val outlineWidth = blobModulation?.outlineWidth?.coerceAtLeast(0f) ?: 3f
+    val outlineAlpha = blobModulation?.outlineAlpha?.coerceIn(0f, 1f) ?: 0.5f
+    if (outlineWidth > 0f && outlineAlpha > 0f) {
+        drawPath(path = path, color = Color.Black.copy(alpha = outlineAlpha), style = Stroke(width = outlineWidth))
     }
 }
 

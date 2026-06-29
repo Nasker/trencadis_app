@@ -134,5 +134,6 @@ data class AcidModulation(
     val sizeAmount: Float = 0.3f,      // 0-1: how much pattern affects size
     val rotationAmount: Float = 0.5f,  // 0-1: how much pattern affects rotation
     val alphaAmount: Float = 0.2f,     // 0-1: how much pattern affects alpha
-    val animationSpeed: Float = 0.5f   // Animation speed multiplier
+    val animationSpeed: Float = 0.5f,  // Animation speed multiplier
+    val brightnessSizeBoost: Float = 0.08f  // 0-0.5+: how much brightness grows shape size
 )

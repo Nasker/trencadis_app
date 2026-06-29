@@ -6,6 +6,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -27,15 +28,18 @@ import com.example.trencadisapp.ui.AcidPattern
 fun ModesPanel(
     currentMode: PixelSelectionMode,
     useFrontCamera: Boolean,
+    useBlobMode: Boolean,
     onModeSelected: (PixelSelectionMode) -> Unit,
     onToggleCamera: () -> Unit,
+    onToggleBlobMode: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     Column(
         modifier = modifier
             .clip(RoundedCornerShape(topEnd = 16.dp, bottomEnd = 16.dp))
             .background(Color(0xAA7A7A7A))
-            .padding(12.dp),
+            .padding(12.dp)
+            .verticalScroll(rememberScrollState()),
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         Text(
@@ -85,6 +89,37 @@ fun ModesPanel(
         ) {
             Text(
                 text = if (useFrontCamera) "FRONT" else "BACK",
+                color = Color.White,
+                fontSize = 10.sp,
+                fontWeight = FontWeight.Bold
+            )
+        }
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        Text(
+            text = "CUBIST",
+            color = Color.White,
+            fontSize = 12.sp,
+            fontWeight = FontWeight.Bold
+        )
+
+        // Blob mode toggle button
+        Box(
+            modifier = Modifier
+                .size(60.dp)
+                .clip(RoundedCornerShape(8.dp))
+                .background(if (useBlobMode) Color(0xFFFF9800) else Color(0xFF424242))
+                .border(
+                    width = 2.dp,
+                    color = Color.White.copy(alpha = 0.5f),
+                    shape = RoundedCornerShape(8.dp)
+                )
+                .clickable(onClick = onToggleBlobMode),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                text = if (useBlobMode) "BLOB" else "TILE",
                 color = Color.White,
                 fontSize = 10.sp,
                 fontWeight = FontWeight.Bold
@@ -534,7 +569,8 @@ fun AcidPanel(
             .clip(RoundedCornerShape(topEnd = 16.dp))
             .background(Color(0xCC1A0A2E))
             .padding(12.dp)
-            .width(280.dp),
+            .width(280.dp)
+            .verticalScroll(rememberScrollState()),
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         // Header with toggle
@@ -641,6 +677,15 @@ fun AcidPanel(
             label = "SIZE",
             value = acidModulation.sizeAmount,
             onValueChange = { onModulationChanged(acidModulation.copy(sizeAmount = it)) }
+        )
+
+        AcidSlider(
+            label = "BRI SIZE",
+            value = kotlin.math.sqrt(acidModulation.brightnessSizeBoost / 1.5f).coerceIn(0f, 1f),
+            onValueChange = {
+                val exponentialBoost = it * it * 1.5f  // 0 to 1.5 with more precision at low values
+                onModulationChanged(acidModulation.copy(brightnessSizeBoost = exponentialBoost))
+            }
         )
         
         AcidSlider(

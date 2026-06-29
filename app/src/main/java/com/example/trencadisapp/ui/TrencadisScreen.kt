@@ -19,7 +19,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -29,6 +31,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.trencadisapp.TrencadisViewModel
 import com.example.trencadisapp.camera.CameraPixelAnalyzer
 import com.example.trencadisapp.ui.components.AcidPanel
+import com.example.trencadisapp.ui.components.BlobPanel
 import com.example.trencadisapp.ui.components.KeysPanel
 import com.example.trencadisapp.ui.components.ModesPanel
 import com.example.trencadisapp.ui.components.ScalesPanel
@@ -38,6 +41,7 @@ import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.isGranted
 import com.google.accompanist.permissions.rememberPermissionState
 import java.util.concurrent.Executors
+import java.util.concurrent.atomic.AtomicReference
 
 @OptIn(ExperimentalPermissionsApi::class)
 @Composable
@@ -47,7 +51,24 @@ fun TrencadisScreen(
     val state by viewModel.state.collectAsState()
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
-    
+    val configuration = LocalConfiguration.current
+    val rootView = LocalView.current
+
+    // Read ratio from the root view after layout — it fills the full hardware screen
+    // including behind system bars, so its dimensions are exact. Re-runs on rotation.
+    DisposableEffect(configuration.orientation) {
+        val listener = android.view.ViewTreeObserver.OnGlobalLayoutListener {
+            val w = rootView.rootView.width.toFloat()
+            val h = rootView.rootView.height.toFloat()
+            android.util.Log.d("TrencadisAR", "rootView $w x $h ratio=${w/h}")
+            viewModel.updateScreenAspectRatio(w, h)
+        }
+        rootView.viewTreeObserver.addOnGlobalLayoutListener(listener)
+        onDispose {
+            rootView.viewTreeObserver.removeOnGlobalLayoutListener(listener)
+        }
+    }
+
     val cameraPermissionState = rememberPermissionState(Manifest.permission.CAMERA)
     
     // Request camera permission on first launch
@@ -80,6 +101,8 @@ fun TrencadisScreen(
             CameraPreviewWithAnalysis(
                 blockSize = state.blockSize,
                 useFrontCamera = state.useFrontCamera,
+                screenAspectRatio = state.screenAspectRatio,
+                blobModulation = if (state.useBlobMode) state.blobModulation else null,
                 onPixelGridReady = { grid ->
                     viewModel.updatePixelGrid(grid)
                 }
@@ -90,6 +113,7 @@ fun TrencadisScreen(
                 pixelGrid = state.pixelGrid,
                 selectedPixel = state.selectedPixel,
                 selectionMode = state.selectionMode,
+                blobModulation = if (state.useBlobMode) state.blobModulation else null,
                 cutoffValue = state.synthState.cutoff,
                 acidModulation = state.acidModulation,
                 acidPatternIndex = state.acidPatternIndex,
@@ -101,7 +125,7 @@ fun TrencadisScreen(
                     // Check if any panel is open
                     val anyPanelOpen = state.showModesPanel || state.showScalesPanel || 
                                        state.showKeysPanel || state.showSynthPanel || 
-                                       state.showAcidPanel || state.showPresetPanel
+                                       state.showAcidPanel || state.showBlobPanel || state.showPresetPanel
                     
                     if (anyPanelOpen) {
                         // Check if tap is outside all panel areas
@@ -110,6 +134,7 @@ fun TrencadisScreen(
                         val inKeysArea = y > height * 0.7f && x > width * 0.1f && x < width * 0.9f
                         val inSynthArea = x > width * 0.65f && y < height * 0.6f
                         val inAcidArea = x < width * 0.35f && y > height * 0.5f
+                        val inBlobArea = x < width * 0.35f && y >= height * 0.4f && y < height * 0.6f
                         val inPresetArea = x > width * 0.65f && y > height * 0.5f
                         
                         val inAnyPanelArea = (state.showModesPanel && inModesArea) ||
@@ -117,6 +142,7 @@ fun TrencadisScreen(
                                              (state.showKeysPanel && inKeysArea) ||
                                              (state.showSynthPanel && inSynthArea) ||
                                              (state.showAcidPanel && inAcidArea) ||
+                                             (state.showBlobPanel && inBlobArea) ||
                                              (state.showPresetPanel && inPresetArea)
                         
                         if (!inAnyPanelArea) {
@@ -126,6 +152,7 @@ fun TrencadisScreen(
                             viewModel.setKeysPanel(false)
                             viewModel.setSynthPanel(false)
                             viewModel.setAcidPanel(false)
+                            viewModel.setBlobPanel(false)
                             viewModel.setPresetPanel(false)
                         }
                     } else {
@@ -136,6 +163,8 @@ fun TrencadisScreen(
                 onEdgeDrag = { x, y, width, height ->
                     // Left edge - modes panel (upper quarter)
                     viewModel.setModesPanel(x < width * 0.05f && y < height * 0.4f)
+                    // Left edge middle - blob panel
+                    viewModel.setBlobPanel(x < width * 0.08f && y >= height * 0.4f && y < height * 0.6f)
                     // Top edge - scales panel
                     viewModel.setScalesPanel(y < height * 0.05f)
                     // Bottom edge - keys panel
@@ -155,13 +184,15 @@ fun TrencadisScreen(
                 visible = state.showModesPanel,
                 enter = slideInHorizontally(initialOffsetX = { -it }),
                 exit = slideOutHorizontally(targetOffsetX = { -it }),
-                modifier = Modifier.align(Alignment.CenterStart)
+                modifier = Modifier.align(Alignment.TopStart)
             ) {
                 ModesPanel(
                     currentMode = state.selectionMode,
                     useFrontCamera = state.useFrontCamera,
+                    useBlobMode = state.useBlobMode,
                     onModeSelected = { viewModel.setSelectionMode(it) },
-                    onToggleCamera = { viewModel.toggleCamera() }
+                    onToggleCamera = { viewModel.toggleCamera() },
+                    onToggleBlobMode = { viewModel.toggleBlobMode() }
                 )
             }
             
@@ -253,11 +284,24 @@ fun TrencadisScreen(
                     }
                 )
             }
+
+            // Blob Panel (Left edge, middle) - cubist blob/mosaic controls
+            AnimatedVisibility(
+                visible = state.showBlobPanel,
+                enter = slideInHorizontally(initialOffsetX = { -it }) + fadeIn(),
+                exit = slideOutHorizontally(targetOffsetX = { -it }) + fadeOut(),
+                modifier = Modifier.align(Alignment.CenterStart)
+            ) {
+                BlobPanel(
+                    blobModulation = state.blobModulation,
+                    onModulationChanged = { viewModel.updateBlobModulation { _ -> it } }
+                )
+            }
             
             // Touch hint indicators at edges - hide all icons when any panel is open
             val anyPanelOpen = state.showModesPanel || state.showScalesPanel || 
                                state.showKeysPanel || state.showSynthPanel || state.showAcidPanel ||
-                               state.showPresetPanel
+                               state.showBlobPanel || state.showPresetPanel
             
             if (iconsVisible && !anyPanelOpen) {
                 EdgeHints(
@@ -266,6 +310,7 @@ fun TrencadisScreen(
                     onKeysClick = { viewModel.setKeysPanel(true) },
                     onSynthClick = { viewModel.setSynthPanel(true) },
                     onAcidClick = { viewModel.setAcidPanel(true) },
+                    onBlobClick = { viewModel.setBlobPanel(true) },
                     onPresetClick = { viewModel.setPresetPanel(true) }
                 )
             }
@@ -295,75 +340,67 @@ fun TrencadisScreen(
 private fun CameraPreviewWithAnalysis(
     blockSize: Int,
     useFrontCamera: Boolean,
+    screenAspectRatio: Float,
+    blobModulation: com.example.trencadisapp.ui.BlobModulation?,
     onPixelGridReady: (com.example.trencadisapp.camera.PixelGrid) -> Unit
 ) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
-    
+
     val cameraExecutor = remember { Executors.newSingleThreadExecutor() }
-    
-    DisposableEffect(Unit) {
-        onDispose {
-            cameraExecutor.shutdown()
-        }
-    }
-    
-    AndroidView(
-        factory = { ctx ->
-            PreviewView(ctx).apply {
-                scaleType = PreviewView.ScaleType.FILL_CENTER
-            }
-        },
-        modifier = Modifier
-            .fillMaxSize()
-            .absoluteOffset(x = (-10000).dp), // Hide off-screen but keep active
-        update = { previewView ->
-            val cameraProviderFuture = ProcessCameraProvider.getInstance(context)
-            
-            cameraProviderFuture.addListener({
-                val cameraProvider = cameraProviderFuture.get()
-                
-                val preview = Preview.Builder()
-                    .build()
-                    .also {
+    // Stable reference to the current analyzer; updated in-place for blob params
+    val analyzerRef = remember { AtomicReference<CameraPixelAnalyzer?>(null) }
+
+    // Hot-swap blob modulation on every recompose — no camera rebind required
+    SideEffect { analyzerRef.get()?.blobModulation = blobModulation }
+
+    DisposableEffect(Unit) { onDispose { cameraExecutor.shutdown() } }
+
+    // key() forces AndroidView recreation (and camera rebind) ONLY when hardware params change.
+    // blobModulation is intentionally excluded from the key.
+    key(blockSize, useFrontCamera, screenAspectRatio) {
+        AndroidView(
+            factory = { ctx ->
+                val newAnalyzer = CameraPixelAnalyzer(
+                    blockSize = blockSize,
+                    mirrorHorizontally = useFrontCamera,
+                    screenAspectRatio = screenAspectRatio,
+                    blobModulation = blobModulation,
+                    onPixelGridReady = onPixelGridReady
+                )
+                analyzerRef.set(newAnalyzer)
+
+                val previewView = PreviewView(ctx).apply {
+                    scaleType = PreviewView.ScaleType.FILL_CENTER
+                }
+
+                val cameraProviderFuture = ProcessCameraProvider.getInstance(ctx)
+                cameraProviderFuture.addListener({
+                    val cameraProvider = cameraProviderFuture.get()
+                    val preview = Preview.Builder().build().also {
                         it.surfaceProvider = previewView.surfaceProvider
                     }
-                
-                // Mirror only for front camera (selfie mode)
-                val imageAnalyzer = ImageAnalysis.Builder()
-                    .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
-                    .build()
-                    .also {
-                        it.setAnalyzer(
-                            cameraExecutor,
-                            CameraPixelAnalyzer(
-                                blockSize = blockSize,
-                                mirrorHorizontally = useFrontCamera,
-                                onPixelGridReady = onPixelGridReady
-                            )
+                    val imageAnalysis = ImageAnalysis.Builder()
+                        .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
+                        .build()
+                        .also { it.setAnalyzer(cameraExecutor, newAnalyzer) }
+                    val cameraSelector = if (useFrontCamera) CameraSelector.DEFAULT_FRONT_CAMERA
+                                         else CameraSelector.DEFAULT_BACK_CAMERA
+                    try {
+                        cameraProvider.unbindAll()
+                        cameraProvider.bindToLifecycle(
+                            lifecycleOwner, cameraSelector, preview, imageAnalysis
                         )
-                    }
-                
-                val cameraSelector = if (useFrontCamera) {
-                    CameraSelector.DEFAULT_FRONT_CAMERA
-                } else {
-                    CameraSelector.DEFAULT_BACK_CAMERA
-                }
-                
-                try {
-                    cameraProvider.unbindAll()
-                    cameraProvider.bindToLifecycle(
-                        lifecycleOwner,
-                        cameraSelector,
-                        preview,
-                        imageAnalyzer
-                    )
-                } catch (e: Exception) {
-                    // Handle camera binding failure
-                }
-            }, ContextCompat.getMainExecutor(context))
-        }
-    )
+                    } catch (e: Exception) { }
+                }, ContextCompat.getMainExecutor(ctx))
+
+                previewView
+            },
+            modifier = Modifier
+                .fillMaxSize()
+                .absoluteOffset(x = (-10000).dp)
+        )
+    }
 }
 
 @Composable
@@ -373,12 +410,14 @@ private fun EdgeHints(
     onKeysClick: () -> Unit = {},
     onSynthClick: () -> Unit = {},
     onAcidClick: () -> Unit = {},
+    onBlobClick: () -> Unit = {},
     onPresetClick: () -> Unit = {},
     showModes: Boolean = true,
     showScales: Boolean = true,
     showKeys: Boolean = true,
     showSynth: Boolean = true,
     showAcid: Boolean = true,
+    showBlob: Boolean = true,
     showPreset: Boolean = true
 ) {
     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
@@ -396,6 +435,17 @@ private fun EdgeHints(
             )
         }
         
+        // Left hint - Blob at 1/2 height (mosaic icon)
+        if (showBlob) {
+            PanelIconButton(
+                icon = "🎨",
+                modifier = Modifier
+                    .align(Alignment.TopStart)
+                    .padding(start = 8.dp, top = maxHeight / 2 - 24.dp),
+                onClick = onBlobClick
+            )
+        }
+
         // Left hint - Acid at 3/4 height (spiral)
         if (showAcid) {
             PanelIconButton(
