@@ -8,6 +8,7 @@ import com.example.trencadisapp.SynthState
 import com.example.trencadisapp.MusicState
 import com.example.trencadisapp.camera.PixelSelectionMode
 import com.example.trencadisapp.ui.AcidModulation
+import com.example.trencadisapp.ui.BlobModulation
 import org.json.JSONObject
 import java.io.File
 import kotlin.math.round
@@ -22,7 +23,9 @@ data class Preset(
     val acidModulation: AcidModulation,
     val acidPatternIndex: Int,
     val selectionMode: PixelSelectionMode,
-    val useFrontCamera: Boolean
+    val useFrontCamera: Boolean,
+    val useBlobMode: Boolean = false,
+    val blobModulation: BlobModulation = BlobModulation()
 ) {
     private fun Float.round2(): Double = (round(this * 100) / 100).toDouble()
     
@@ -75,6 +78,17 @@ data class Preset(
             put("acidPatternIndex", acidPatternIndex)
             put("selectionMode", selectionMode.name)
             put("useFrontCamera", useFrontCamera)
+            put("useBlobMode", useBlobMode)
+            put("blob", JSONObject().apply {
+                put("hueBuckets", blobModulation.hueBuckets)
+                put("minBlobSize", blobModulation.minBlobSize)
+                put("maxBlobs", blobModulation.maxBlobs)
+                put("blobAlpha", blobModulation.blobAlpha.round2())
+                put("outlineWidth", blobModulation.outlineWidth.round2())
+                put("outlineAlpha", blobModulation.outlineAlpha.round2())
+                put("tileOverlayAlpha", blobModulation.tileOverlayAlpha.round2())
+                put("blobsOnTop", blobModulation.blobsOnTop)
+            })
         }
     }
     
@@ -83,6 +97,7 @@ data class Preset(
             val synth = json.getJSONObject("synth")
             val music = json.getJSONObject("music")
             val acid = json.getJSONObject("acid")
+            val blob = json.optJSONObject("blob")
             
             return Preset(
                 name = json.getString("name"),
@@ -128,7 +143,18 @@ data class Preset(
                 } catch (e: Exception) {
                     PixelSelectionMode.SEQUENCE
                 },
-                useFrontCamera = json.optBoolean("useFrontCamera", false)
+                useFrontCamera = json.optBoolean("useFrontCamera", false),
+                useBlobMode = json.optBoolean("useBlobMode", false),
+                blobModulation = if (blob != null) BlobModulation(
+                    hueBuckets = blob.optInt("hueBuckets", 8),
+                    minBlobSize = blob.optInt("minBlobSize", 2),
+                    maxBlobs = blob.optInt("maxBlobs", 300),
+                    blobAlpha = blob.optDouble("blobAlpha", 1.0).toFloat(),
+                    outlineWidth = blob.optDouble("outlineWidth", 3.0).toFloat(),
+                    outlineAlpha = blob.optDouble("outlineAlpha", 0.6).toFloat(),
+                    tileOverlayAlpha = blob.optDouble("tileOverlayAlpha", 0.15).toFloat(),
+                    blobsOnTop = blob.optBoolean("blobsOnTop", true)
+                ) else BlobModulation()
             )
         }
     }

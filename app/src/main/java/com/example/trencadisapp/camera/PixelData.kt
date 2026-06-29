@@ -46,7 +46,8 @@ data class PixelGrid(
     val cols: Int,
     val rows: Int,
     val blockSize: Int,
-    val pixels: List<PixelData>
+    val pixels: List<PixelData>,
+    val blobs: List<BlobDetector.PixelBlob> = emptyList()
 ) {
     fun getPixelAt(col: Int, row: Int): PixelData? {
         val index = col * rows + row
