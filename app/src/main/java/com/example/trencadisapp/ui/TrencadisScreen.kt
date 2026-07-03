@@ -2,6 +2,7 @@ package com.example.trencadisapp.ui
 
 import android.Manifest
 import android.content.Intent
+import android.os.Build
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.Preview
@@ -35,11 +36,14 @@ import com.example.trencadisapp.ui.components.BlobPanel
 import com.example.trencadisapp.ui.components.KeysPanel
 import com.example.trencadisapp.ui.components.ModesPanel
 import com.example.trencadisapp.ui.components.ScalesPanel
+import com.example.trencadisapp.midi.MidiOutputMode
+import com.example.trencadisapp.midi.MidiState
 import com.example.trencadisapp.ui.components.SynthPanel
 import com.example.trencadisapp.ui.components.PresetPanel
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.isGranted
 import com.google.accompanist.permissions.rememberPermissionState
+import com.google.accompanist.permissions.rememberMultiplePermissionsState
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicReference
 
@@ -70,7 +74,15 @@ fun TrencadisScreen(
     }
 
     val cameraPermissionState = rememberPermissionState(Manifest.permission.CAMERA)
-    
+
+    // BLE permissions (only needed on Android 12+)
+    val blePermissions = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+        rememberMultiplePermissionsState(listOf(
+            Manifest.permission.BLUETOOTH_CONNECT,
+            Manifest.permission.BLUETOOTH_ADVERTISE
+        ))
+    } else null
+
     // Request camera permission on first launch
     LaunchedEffect(Unit) {
         if (!cameraPermissionState.status.isGranted) {
@@ -78,10 +90,22 @@ fun TrencadisScreen(
         }
     }
     
-    // Initialize audio when permission is granted
+    // Initialize audio when camera permission is granted
     LaunchedEffect(cameraPermissionState.status.isGranted) {
         if (cameraPermissionState.status.isGranted && !state.isAudioInitialized) {
             viewModel.initializeAudio()
+        }
+    }
+
+    // Only enable BLE automatically if the user already tried to toggle it on but
+    // was blocked waiting for permission — track that intent with this flag.
+    var pendingBleEnable by remember { mutableStateOf(false) }
+    if (blePermissions != null) {
+        LaunchedEffect(blePermissions.allPermissionsGranted) {
+            if (blePermissions.allPermissionsGranted && pendingBleEnable) {
+                pendingBleEnable = false
+                viewModel.setBleEnabled(true)
+            }
         }
     }
     
@@ -241,7 +265,22 @@ fun TrencadisScreen(
             ) {
                 SynthPanel(
                     synthState = state.synthState,
-                    onSynthStateChange = { viewModel.updateSynthState(it) }
+                    onSynthStateChange = { viewModel.updateSynthState(it) },
+                    midiState = state.midiState,
+                    onMidiEnabled = { viewModel.setMidiEnabled(it) },
+                    onMidiOutputMode = { viewModel.setMidiOutputMode(it) },
+                    onMidiChannel = { viewModel.setMidiChannel(it) },
+                    onMidiBleEnabled = { enabled ->
+                        if (!enabled) {
+                            pendingBleEnable = false
+                            viewModel.setBleEnabled(false)
+                        } else if (blePermissions == null || blePermissions.allPermissionsGranted) {
+                            viewModel.setBleEnabled(true)
+                        } else {
+                            pendingBleEnable = true
+                            blePermissions.launchMultiplePermissionRequest()
+                        }
+                    }
                 )
             }
             
@@ -305,6 +344,7 @@ fun TrencadisScreen(
             
             if (iconsVisible && !anyPanelOpen) {
                 EdgeHints(
+                    midiState = state.midiState,
                     onModesClick = { viewModel.setModesPanel(true) },
                     onScalesClick = { viewModel.setScalesPanel(true) },
                     onKeysClick = { viewModel.setKeysPanel(true) },
@@ -405,6 +445,7 @@ private fun CameraPreviewWithAnalysis(
 
 @Composable
 private fun EdgeHints(
+    midiState: MidiState = MidiState(),
     onModesClick: () -> Unit = {},
     onScalesClick: () -> Unit = {},
     onKeysClick: () -> Unit = {},
@@ -481,13 +522,29 @@ private fun EdgeHints(
         
         // Right hint - Synth (waveform ~) at 1/4 height
         if (showSynth) {
-            PanelIconButton(
-                icon = "∿",
+            Box(
                 modifier = Modifier
                     .align(Alignment.TopEnd)
-                    .padding(end = 8.dp, top = quarterHeight - 24.dp),
-                onClick = onSynthClick
-            )
+                    .padding(end = 8.dp, top = quarterHeight - 24.dp)
+            ) {
+                PanelIconButton(
+                    icon = "∿",
+                    onClick = onSynthClick
+                )
+                val dotColor = when {
+                    midiState.isClockLocked -> Color(0xFF00E5A0)
+                    midiState.enabled       -> Color(0xFFFFD040)
+                    else                    -> Color.Transparent
+                }
+                if (dotColor != Color.Transparent) {
+                    Box(
+                        modifier = Modifier
+                            .size(8.dp)
+                            .align(Alignment.TopEnd)
+                            .background(dotColor, androidx.compose.foundation.shape.CircleShape)
+                    )
+                }
+            }
         }
         
         // Right hint - Presets (diskette) at 3/4 height

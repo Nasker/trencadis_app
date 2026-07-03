@@ -17,6 +17,15 @@ import com.example.trencadisapp.ui.AcidPattern
 import com.example.trencadisapp.ui.BlobModulation
 import com.example.trencadisapp.preset.Preset
 import com.example.trencadisapp.preset.PresetManager
+import com.example.trencadisapp.midi.BleMidiPeripheral
+import com.example.trencadisapp.midi.BleNoteDestination
+import com.example.trencadisapp.midi.MidiBus
+import com.example.trencadisapp.midi.MidiClockSource
+import com.example.trencadisapp.midi.MidiNoteDestination
+import com.example.trencadisapp.midi.MidiOutputMode
+import com.example.trencadisapp.midi.MidiState
+import com.example.trencadisapp.midi.NoteRouter
+import com.example.trencadisapp.midi.PdNoteDestination
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -81,7 +90,8 @@ data class TrencadisState(
     val presetNames: List<String> = emptyList(),
     val screenAspectRatio: Float = 9f / 16f,  // width/height, updated once canvas is measured
     val useBlobMode: Boolean = false,
-    val blobModulation: BlobModulation = BlobModulation()
+    val blobModulation: BlobModulation = BlobModulation(),
+    val midiState: MidiState = MidiState()
 )
 
 class TrencadisViewModel(application: Application) : AndroidViewModel(application) {
@@ -91,6 +101,17 @@ class TrencadisViewModel(application: Application) : AndroidViewModel(applicatio
     
     private val pdEngine = PdAudioEngine(application)
     private val presetManager = PresetManager(application)
+
+    private val pdNoteDestination = PdNoteDestination(pdEngine)
+    private val midiNoteDestination = MidiNoteDestination()
+    private val blePeripheral = BleMidiPeripheral(application).also { ble ->
+        ble.onConnectionChanged = { connected ->
+            _state.update { it.copy(midiState = it.midiState.copy(bleConnected = connected)) }
+        }
+    }
+    private val bleNoteDestination = BleNoteDestination(blePeripheral)
+    private val noteRouter = NoteRouter().apply { add(pdNoteDestination) }
+    private val midiClockSource = MidiClockSource(application, viewModelScope)
     
     private var lastIp = 0f
     private var lastJp = 0f
@@ -121,6 +142,20 @@ class TrencadisViewModel(application: Application) : AndroidViewModel(applicatio
         // Copy bundled presets on first launch
         presetManager.copyBundledPresetsIfNeeded()
         refreshPresetList()
+
+        // Start collecting MIDI clock (no-op until device connects)
+        midiClockSource.connect()
+        viewModelScope.launch {
+            midiClockSource.isConnected.collect { connected ->
+                _state.update { it.copy(midiState = it.midiState.copy(isClockLocked = connected)) }
+            }
+        }
+        viewModelScope.launch {
+            midiClockSource.bpmFlow.collect { bpm ->
+                if (_state.value.midiState.isClockLocked) setTempo(bpm)
+                _state.update { it.copy(midiState = it.midiState.copy(externalBpm = bpm)) }
+            }
+        }
     }
     
     fun initializeAudio() {
@@ -135,6 +170,10 @@ class TrencadisViewModel(application: Application) : AndroidViewModel(applicatio
     }
     
     fun releaseAudio() {
+        noteRouter.allNotesOff(_state.value.midiState.channel)
+        midiClockSource.disconnect()
+        blePeripheral.stopAdvertising()
+        MidiBus.closeUsbNotePort()
         pdEngine.release()
         _state.update { it.copy(isAudioInitialized = false) }
     }
@@ -196,7 +235,8 @@ class TrencadisViewModel(application: Application) : AndroidViewModel(applicatio
         pdEngine.setX(ip)
         pdEngine.setY(jp + 0.1f)
         pdEngine.setFrequency(freq)
-        pdEngine.setGain(pixel.brightness * 0.5f)
+        val pdActive = _state.value.midiState.outputMode != MidiOutputMode.MIDI_OUT
+        pdEngine.setGain(if (pdActive) pixel.brightness * 0.5f else 0f)
         
         pdEngine.setCutoff(cutoff)
         pdEngine.setResonance(1 + 100 * synthState.resonance.pow(3))
@@ -226,10 +266,25 @@ class TrencadisViewModel(application: Application) : AndroidViewModel(applicatio
         }
     }
     
+    private fun freqToMidiPitch(freq: Float): Int =
+        (69 + 12 * Math.log(freq / 440.0) / Math.log(2.0)).toInt().coerceIn(0, 127)
+
     private fun incrementSequenceIndex() {
         _state.update { state ->
             val maxIndex = state.pixelGrid?.pixels?.size ?: 1
             state.copy(sequenceIndex = (state.sequenceIndex + 1) % maxIndex)
+        }
+        val state = _state.value
+        if (state.midiState.enabled && state.midiState.outputMode != MidiOutputMode.INTERNAL) {
+            state.selectedPixel?.let { pixel ->
+                val music = state.musicState
+                val freq = com.example.trencadisapp.audio.MusicConstants.calculateFrequency(
+                    pixel.hue, music.scaleIndex, music.keyIndex, music.octaveIndex
+                )
+                val pitch = freqToMidiPitch(freq)
+                val velocity = (pixel.brightness * 127).toInt().coerceIn(1, 127)
+                noteRouter.noteOn(pitch, velocity, state.midiState.channel)
+            }
         }
     }
     
@@ -426,6 +481,50 @@ class TrencadisViewModel(application: Application) : AndroidViewModel(applicatio
         return presetManager.createShareIntent(name)
     }
     
+    fun setMidiEnabled(enabled: Boolean) {
+        _state.update { it.copy(midiState = it.midiState.copy(enabled = enabled)) }
+        if (enabled) {
+            noteRouter.add(midiNoteDestination)
+        } else {
+            noteRouter.remove(midiNoteDestination)
+            noteRouter.allNotesOff(_state.value.midiState.channel)
+        }
+    }
+
+    fun setMidiOutputMode(mode: MidiOutputMode) {
+        _state.update { it.copy(midiState = it.midiState.copy(outputMode = mode)) }
+        pdNoteDestination.setActive(mode != MidiOutputMode.MIDI_OUT)
+        when (mode) {
+            MidiOutputMode.INTERNAL -> {
+                noteRouter.remove(midiNoteDestination)
+                noteRouter.remove(bleNoteDestination)
+            }
+            MidiOutputMode.MIDI_OUT, MidiOutputMode.BOTH -> {
+                noteRouter.add(midiNoteDestination)
+                if (_state.value.midiState.bleEnabled) noteRouter.add(bleNoteDestination)
+            }
+        }
+    }
+
+    fun setMidiChannel(channel: Int) {
+        noteRouter.allNotesOff(_state.value.midiState.channel)
+        _state.update { it.copy(midiState = it.midiState.copy(channel = channel.coerceIn(1, 16))) }
+    }
+
+    fun setBleEnabled(enabled: Boolean) {
+        _state.update { it.copy(midiState = it.midiState.copy(bleEnabled = enabled)) }
+        if (enabled) {
+            blePeripheral.startAdvertising()
+            if (_state.value.midiState.outputMode != MidiOutputMode.INTERNAL) {
+                noteRouter.add(bleNoteDestination)
+            }
+        } else {
+            noteRouter.remove(bleNoteDestination)
+            noteRouter.allNotesOff(_state.value.midiState.channel)
+            blePeripheral.stopAdvertising()
+        }
+    }
+
     override fun onCleared() {
         super.onCleared()
         releaseAudio()
