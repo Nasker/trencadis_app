@@ -29,14 +29,14 @@
   },
   "acid": {
     "enabled": false,
-    "multiShape": false,
     "hueAmount": 0.5,
-    "sizeAmount": 0.30000001192092896,
+    "sizeAmount": 0.3,
     "rotationAmount": 0.5,
-    "alphaAmount": 0.20000000298023224,
-    "animationSpeed": 0.5
+    "alphaAmount": 0.2,
+    "animationSpeed": 0.5,
+    "brightnessSizeBoost": 0.08
   },
-  "acidPatternIndex": 9,
+  "acidPatternIndex": 5,
   "selectionMode": "SEQUENCE",
   "useFrontCamera": false
 }

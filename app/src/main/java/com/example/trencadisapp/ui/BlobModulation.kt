@@ -9,27 +9,24 @@ package com.example.trencadisapp.ui
 data class BlobModulation(
     // How many hue divisions are used to group colors.
     // Lower values = bigger blobs, fewer polygons. Higher = smaller, more numerous blobs.
-    val hueBuckets: Int = 8,
+    val hueBuckets: Int = 16,
 
     // Minimum number of pixels required to form a blob.
     // Lower = more tiny fragments, higher = only larger regions.
-    val minBlobSize: Int = 2,
+    val minBlobSize: Int = 50,
 
     // Maximum number of blobs to draw per frame (performance cap).
-    val maxBlobs: Int = 300,
+    val maxBlobs: Int = 500,
 
-    // Opacity of the filled polygon. 1.0 = fully opaque, 0.0 = invisible.
-    val blobAlpha: Float = 1.0f,
+    // Crossfade between tiles and blobs. 0.0 = only tiles, 1.0 = only blobs.
+    // At 0.5 both layers are drawn at 50% opacity for a smooth blend.
+    val blobBlend: Float = 1.0f,
 
     // Width of the dark outline around each blob polygon.
-    val outlineWidth: Float = 3f,
+    val outlineWidth: Float = 10f,
 
     // Opacity of the dark outline.
-    val outlineAlpha: Float = 0.6f,
-
-    // Opacity of the original per-pixel tile overlay drawn under the blobs.
-    // 0.0 = only blobs, 1.0 = full original tile effect visible underneath.
-    val tileOverlayAlpha: Float = 0.15f,
+    val outlineAlpha: Float = 0.5f,
 
     // When true, draw blobs on top of the tile overlay; when false, draw them behind.
     val blobsOnTop: Boolean = true

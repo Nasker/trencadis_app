@@ -31,10 +31,9 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.trencadisapp.TrencadisViewModel
 import com.example.trencadisapp.camera.CameraPixelAnalyzer
-import com.example.trencadisapp.ui.components.AcidPanel
-import com.example.trencadisapp.ui.components.BlobPanel
 import com.example.trencadisapp.ui.components.KeysPanel
 import com.example.trencadisapp.ui.components.ModesPanel
+import com.example.trencadisapp.ui.components.PalettePanel
 import com.example.trencadisapp.ui.components.ScalesPanel
 import com.example.trencadisapp.midi.MidiOutputMode
 import com.example.trencadisapp.midi.MidiState
@@ -149,7 +148,7 @@ fun TrencadisScreen(
                     // Check if any panel is open
                     val anyPanelOpen = state.showModesPanel || state.showScalesPanel || 
                                        state.showKeysPanel || state.showSynthPanel || 
-                                       state.showAcidPanel || state.showBlobPanel || state.showPresetPanel
+                                       state.showPalettePanel || state.showPresetPanel
                     
                     if (anyPanelOpen) {
                         // Check if tap is outside all panel areas
@@ -157,16 +156,14 @@ fun TrencadisScreen(
                         val inScalesArea = y < height * 0.15f
                         val inKeysArea = y > height * 0.7f && x > width * 0.1f && x < width * 0.9f
                         val inSynthArea = x > width * 0.65f && y < height * 0.6f
-                        val inAcidArea = x < width * 0.35f && y > height * 0.5f
-                        val inBlobArea = x < width * 0.35f && y >= height * 0.4f && y < height * 0.6f
+                        val inPaletteArea = x < width * 0.35f && y > height * 0.4f
                         val inPresetArea = x > width * 0.65f && y > height * 0.5f
                         
                         val inAnyPanelArea = (state.showModesPanel && inModesArea) ||
                                              (state.showScalesPanel && inScalesArea) ||
                                              (state.showKeysPanel && inKeysArea) ||
                                              (state.showSynthPanel && inSynthArea) ||
-                                             (state.showAcidPanel && inAcidArea) ||
-                                             (state.showBlobPanel && inBlobArea) ||
+                                             (state.showPalettePanel && inPaletteArea) ||
                                              (state.showPresetPanel && inPresetArea)
                         
                         if (!inAnyPanelArea) {
@@ -175,8 +172,7 @@ fun TrencadisScreen(
                             viewModel.setScalesPanel(false)
                             viewModel.setKeysPanel(false)
                             viewModel.setSynthPanel(false)
-                            viewModel.setAcidPanel(false)
-                            viewModel.setBlobPanel(false)
+                            viewModel.setPalettePanel(false)
                             viewModel.setPresetPanel(false)
                         }
                     } else {
@@ -186,17 +182,15 @@ fun TrencadisScreen(
                 },
                 onEdgeDrag = { x, y, width, height ->
                     // Left edge - modes panel (upper quarter)
-                    viewModel.setModesPanel(x < width * 0.05f && y < height * 0.4f)
-                    // Left edge middle - blob panel
-                    viewModel.setBlobPanel(x < width * 0.08f && y >= height * 0.4f && y < height * 0.6f)
+                    viewModel.setModesPanel(x < width * 0.05f && y < height * 0.35f)
+                    // Left edge middle/lower - palette panel (blob + acid unified)
+                    viewModel.setPalettePanel(x < width * 0.1f && y >= height * 0.5f && y < height * 0.9f)
                     // Top edge - scales panel
                     viewModel.setScalesPanel(y < height * 0.05f)
                     // Bottom edge - keys panel
                     viewModel.setKeysPanel(y > height * 0.95f && x > width * 0.2f)
                     // Right edge upper - synth panel (upper half)
                     viewModel.setSynthPanel(x > width * 0.95f && y < height * 0.5f)
-                    // Left edge lower - acid panel (around 3/4 height)
-                    viewModel.setAcidPanel(x < width * 0.1f && y > height * 0.6f && y < height * 0.9f)
                     // Right edge lower - preset panel (around 3/4 height)
                     viewModel.setPresetPanel(x > width * 0.9f && y > height * 0.6f && y < height * 0.9f)
                 }
@@ -213,10 +207,8 @@ fun TrencadisScreen(
                 ModesPanel(
                     currentMode = state.selectionMode,
                     useFrontCamera = state.useFrontCamera,
-                    useBlobMode = state.useBlobMode,
                     onModeSelected = { viewModel.setSelectionMode(it) },
-                    onToggleCamera = { viewModel.toggleCamera() },
-                    onToggleBlobMode = { viewModel.toggleBlobMode() }
+                    onToggleCamera = { viewModel.toggleCamera() }
                 )
             }
             
@@ -284,24 +276,26 @@ fun TrencadisScreen(
                 )
             }
             
-            // Acid Panel (Left side, above bottom) - slides in/out
+            // Palette Panel (Left edge, middle/lower) — unified blob + acid controls
             AnimatedVisibility(
-                visible = state.showAcidPanel,
+                visible = state.showPalettePanel,
                 enter = slideInHorizontally(initialOffsetX = { -it }) + fadeIn(),
                 exit = slideOutHorizontally(targetOffsetX = { -it }) + fadeOut(),
-                modifier = Modifier
-                    .align(Alignment.BottomStart)
-                    .padding(bottom = 80.dp)  // Move up to avoid piano roll icon overlap
+                modifier = Modifier.align(Alignment.CenterStart)
             ) {
-                AcidPanel(
+                PalettePanel(
+                    useBlobMode = state.useBlobMode,
+                    blobModulation = state.blobModulation,
                     acidModulation = state.acidModulation,
                     acidPatternIndex = state.acidPatternIndex,
+                    onToggleBlobMode = { viewModel.toggleBlobMode() },
+                    onBlobModulationChanged = { viewModel.updateBlobModulation { _ -> it } },
                     onToggleAcid = { viewModel.toggleAcid() },
                     onPatternSelected = { viewModel.setAcidPattern(it) },
-                    onModulationChanged = { newModulation -> viewModel.setAcidModulation(newModulation) }
+                    onAcidModulationChanged = { newModulation -> viewModel.setAcidModulation(newModulation) }
                 )
             }
-            
+
             // Preset Panel (Right edge, below synth)
             AnimatedVisibility(
                 visible = state.showPresetPanel,
@@ -324,23 +318,10 @@ fun TrencadisScreen(
                 )
             }
 
-            // Blob Panel (Left edge, middle) - cubist blob/mosaic controls
-            AnimatedVisibility(
-                visible = state.showBlobPanel,
-                enter = slideInHorizontally(initialOffsetX = { -it }) + fadeIn(),
-                exit = slideOutHorizontally(targetOffsetX = { -it }) + fadeOut(),
-                modifier = Modifier.align(Alignment.CenterStart)
-            ) {
-                BlobPanel(
-                    blobModulation = state.blobModulation,
-                    onModulationChanged = { viewModel.updateBlobModulation { _ -> it } }
-                )
-            }
-            
             // Touch hint indicators at edges - hide all icons when any panel is open
             val anyPanelOpen = state.showModesPanel || state.showScalesPanel || 
-                               state.showKeysPanel || state.showSynthPanel || state.showAcidPanel ||
-                               state.showBlobPanel || state.showPresetPanel
+                               state.showKeysPanel || state.showSynthPanel || state.showPalettePanel ||
+                               state.showPresetPanel
             
             if (iconsVisible && !anyPanelOpen) {
                 EdgeHints(
@@ -349,8 +330,7 @@ fun TrencadisScreen(
                     onScalesClick = { viewModel.setScalesPanel(true) },
                     onKeysClick = { viewModel.setKeysPanel(true) },
                     onSynthClick = { viewModel.setSynthPanel(true) },
-                    onAcidClick = { viewModel.setAcidPanel(true) },
-                    onBlobClick = { viewModel.setBlobPanel(true) },
+                    onPaletteClick = { viewModel.setPalettePanel(true) },
                     onPresetClick = { viewModel.setPresetPanel(true) }
                 )
             }
@@ -450,15 +430,13 @@ private fun EdgeHints(
     onScalesClick: () -> Unit = {},
     onKeysClick: () -> Unit = {},
     onSynthClick: () -> Unit = {},
-    onAcidClick: () -> Unit = {},
-    onBlobClick: () -> Unit = {},
+    onPaletteClick: () -> Unit = {},
     onPresetClick: () -> Unit = {},
     showModes: Boolean = true,
     showScales: Boolean = true,
     showKeys: Boolean = true,
     showSynth: Boolean = true,
-    showAcid: Boolean = true,
-    showBlob: Boolean = true,
+    showPalette: Boolean = true,
     showPreset: Boolean = true
 ) {
     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
@@ -476,28 +454,17 @@ private fun EdgeHints(
             )
         }
         
-        // Left hint - Blob at 1/2 height (mosaic icon)
-        if (showBlob) {
+        // Left hint - Palette at 3/4 height (mosaic icon — unified blob + acid)
+        if (showPalette) {
             PanelIconButton(
                 icon = "🎨",
                 modifier = Modifier
                     .align(Alignment.TopStart)
-                    .padding(start = 8.dp, top = maxHeight / 2 - 24.dp),
-                onClick = onBlobClick
+                    .padding(start = 8.dp, top = threeQuarterHeight - 24.dp),
+                onClick = onPaletteClick
             )
         }
 
-        // Left hint - Acid at 3/4 height (spiral)
-        if (showAcid) {
-            PanelIconButton(
-                icon = "🌀",
-                modifier = Modifier
-                    .align(Alignment.TopStart)
-                    .padding(start = 8.dp, top = threeQuarterHeight - 24.dp),
-                onClick = onAcidClick
-            )
-        }
-        
         // Top hint - Scales (treble clef / sol key)
         if (showScales) {
             PanelIconButton(

@@ -136,16 +136,14 @@ fun CubistCanvas(
             // effect even when brightnessSizeBoost makes bright shapes much larger.
             val sortedPixels = grid.pixels.sortedBy { it.brightness }
             
-            fun drawTilesAt(alphaScale: Float) {
-                val mod = if (alphaScale == 1f) acidModulation
-                          else acidModulation.copy(alphaAmount = acidModulation.alphaAmount * alphaScale)
+            fun drawTilesAt(globalAlpha: Float) {
                 for (pixel in sortedPixels) {
                     drawCubistShapeOptimized(
                         pixel = pixel,
                         blockWidth = blockWidth,
                         blockHeight = blockHeight,
                         acidPattern = acidPattern,
-                        acidModulation = mod,
+                        acidModulation = acidModulation,
                         trianglePath = trianglePath,
                         diamondPath = diamondPath,
                         hexPath = hexPath,
@@ -153,27 +151,35 @@ fun CubistCanvas(
                         hexCos = hexCos,
                         hexSin = hexSin,
                         starCos = starCos,
-                        starSin = starSin
+                        starSin = starSin,
+                        globalAlpha = globalAlpha
                     )
                 }
             }
 
             if (blobModulation != null && grid.blobs.isNotEmpty()) {
                 val sortedBlobs = grid.blobs.sortedBy { it.averageColor.brightness }
+                // Smoothstep crossfade: blobBlend=0 → only tiles, blobBlend=1 → only blobs
+                val t = blobModulation.blobBlend.coerceIn(0f, 1f)
+                val smoothT = t * t * (3f - 2f * t)
+                val blobAlpha = smoothT
+                val tileAlpha = 1f - smoothT
                 if (blobModulation.blobsOnTop) {
-                    // Tiles at reduced opacity as background texture, then blobs on top.
-                    // tileOverlayAlpha = 0 means skip tiles entirely (fastest path).
-                    val overlay = blobModulation.tileOverlayAlpha
-                    if (overlay > 0f) drawTilesAt(overlay)
-                    for (blob in sortedBlobs) {
-                        drawBlobPolygon(blob, blockWidth, blockHeight, blobModulation, acidPattern, acidModulation)
+                    // Tiles first at crossfade opacity, then blobs on top.
+                    if (tileAlpha > 0.01f) drawTilesAt(tileAlpha)
+                    if (blobAlpha > 0.01f) {
+                        for (blob in sortedBlobs) {
+                            drawBlobPolygon(blob, blockWidth, blockHeight, blobModulation, acidPattern, acidModulation)
+                        }
                     }
                 } else {
-                    // Blobs as background, tiles at full opacity on top.
-                    for (blob in sortedBlobs) {
-                        drawBlobPolygon(blob, blockWidth, blockHeight, blobModulation, acidPattern, acidModulation)
+                    // Blobs first, then tiles on top at crossfade opacity.
+                    if (blobAlpha > 0.01f) {
+                        for (blob in sortedBlobs) {
+                            drawBlobPolygon(blob, blockWidth, blockHeight, blobModulation, acidPattern, acidModulation)
+                        }
                     }
-                    drawTilesAt(1f)
+                    if (tileAlpha > 0.01f) drawTilesAt(tileAlpha)
                 }
             } else {
                 drawTilesAt(1f)
@@ -205,7 +211,8 @@ private fun DrawScope.drawCubistShapeOptimized(
     hexCos: FloatArray,
     hexSin: FloatArray,
     starCos: FloatArray,
-    starSin: FloatArray
+    starSin: FloatArray,
+    globalAlpha: Float = 1f
 ) {
     val x = pixel.gridX * blockWidth + blockWidth / 2
     val y = pixel.gridY * blockHeight + blockHeight / 2
@@ -273,7 +280,7 @@ private fun DrawScope.drawCubistShapeOptimized(
         alpha = alpha * (1f - acidModulation.alphaAmount) + acidAlpha * acidModulation.alphaAmount
     }
     
-    val color = Color(r, g, b, alpha)
+    val color = Color(r, g, b, alpha * globalAlpha)
     
     // Calculate acid size modulation
     val acidSizeMod = if (acidModulation.enabled && acidModulation.sizeAmount > 0f) {
@@ -290,16 +297,8 @@ private fun DrawScope.drawCubistShapeOptimized(
     val shapeSize = baseShapeSize * acidSizeMod
     val halfSize = shapeSize / 2
     
-    // Determine shape type - use larger regions for coherence
-    val effectiveShape = if (acidModulation.multiShape) {
-        val regionX = pixel.gridX / 4
-        val regionY = pixel.gridY / 4
-        if (acidModulation.enabled) {
-            ((regionX + regionY * 2 + (acidAngle / 5).toInt()) % 6).coerceIn(0, 5)
-        } else {
-            ((regionX + regionY + (hue / 120).toInt()) % 6).coerceIn(0, 5)
-        }
-    } else 0
+    // Always use rectangles — multiShape removed for performance
+    val effectiveShape = 0
     
     // Rotate around the shape's own center position using pivot
     rotate(degrees = rotation, pivot = Offset(x, y)) {
@@ -409,7 +408,7 @@ private fun DrawScope.drawBlobPolygon(
         acidPattern.getHueModulation(acidAngle) * acidModulation.hueAmount
     } else 0f
 
-    val blobAlpha = blobModulation?.blobAlpha?.coerceIn(0f, 1f) ?: 0.95f
+    val blobAlpha = blobModulation?.blobBlend?.coerceIn(0f, 1f) ?: 0.95f
 
     val fillColor = if (acidModulation.enabled && acidModulation.hueAmount > 0f) {
         // Shift hue slightly by acid pattern

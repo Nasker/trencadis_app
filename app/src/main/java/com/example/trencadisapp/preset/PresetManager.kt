@@ -67,12 +67,12 @@ data class Preset(
             // Acid modulation
             put("acid", JSONObject().apply {
                 put("enabled", acidModulation.enabled)
-                put("multiShape", acidModulation.multiShape)
                 put("hueAmount", acidModulation.hueAmount.round2())
                 put("sizeAmount", acidModulation.sizeAmount.round2())
                 put("rotationAmount", acidModulation.rotationAmount.round2())
                 put("alphaAmount", acidModulation.alphaAmount.round2())
                 put("animationSpeed", acidModulation.animationSpeed.round2())
+                put("brightnessSizeBoost", acidModulation.brightnessSizeBoost.round2())
             })
             
             put("acidPatternIndex", acidPatternIndex)
@@ -83,10 +83,9 @@ data class Preset(
                 put("hueBuckets", blobModulation.hueBuckets)
                 put("minBlobSize", blobModulation.minBlobSize)
                 put("maxBlobs", blobModulation.maxBlobs)
-                put("blobAlpha", blobModulation.blobAlpha.round2())
+                put("blobBlend", blobModulation.blobBlend.round2())
                 put("outlineWidth", blobModulation.outlineWidth.round2())
                 put("outlineAlpha", blobModulation.outlineAlpha.round2())
-                put("tileOverlayAlpha", blobModulation.tileOverlayAlpha.round2())
                 put("blobsOnTop", blobModulation.blobsOnTop)
             })
         }
@@ -130,14 +129,14 @@ data class Preset(
                 ),
                 acidModulation = AcidModulation(
                     enabled = acid.optBoolean("enabled", false),
-                    multiShape = acid.optBoolean("multiShape", false),
                     hueAmount = acid.optDouble("hueAmount", 0.5).toFloat(),
                     sizeAmount = acid.optDouble("sizeAmount", 0.3).toFloat(),
                     rotationAmount = acid.optDouble("rotationAmount", 0.5).toFloat(),
                     alphaAmount = acid.optDouble("alphaAmount", 0.2).toFloat(),
-                    animationSpeed = acid.optDouble("animationSpeed", 0.5).toFloat()
+                    animationSpeed = acid.optDouble("animationSpeed", 0.5).toFloat(),
+                    brightnessSizeBoost = acid.optDouble("brightnessSizeBoost", 0.08).toFloat()
                 ),
-                acidPatternIndex = json.optInt("acidPatternIndex", 9),
+                acidPatternIndex = json.optInt("acidPatternIndex", 5),
                 selectionMode = try {
                     PixelSelectionMode.valueOf(json.optString("selectionMode", "SEQUENCE"))
                 } catch (e: Exception) {
@@ -146,13 +145,14 @@ data class Preset(
                 useFrontCamera = json.optBoolean("useFrontCamera", false),
                 useBlobMode = json.optBoolean("useBlobMode", false),
                 blobModulation = if (blob != null) BlobModulation(
-                    hueBuckets = blob.optInt("hueBuckets", 8),
-                    minBlobSize = blob.optInt("minBlobSize", 2),
-                    maxBlobs = blob.optInt("maxBlobs", 300),
-                    blobAlpha = blob.optDouble("blobAlpha", 1.0).toFloat(),
-                    outlineWidth = blob.optDouble("outlineWidth", 3.0).toFloat(),
-                    outlineAlpha = blob.optDouble("outlineAlpha", 0.6).toFloat(),
-                    tileOverlayAlpha = blob.optDouble("tileOverlayAlpha", 0.15).toFloat(),
+                    hueBuckets = blob.optInt("hueBuckets", 16),
+                    minBlobSize = blob.optInt("minBlobSize", 50),
+                    maxBlobs = blob.optInt("maxBlobs", 500),
+                    blobBlend = blob.optDouble("blobBlend", 
+                        blob.optDouble("blobAlpha", 1.0)
+                    ).toFloat(),
+                    outlineWidth = blob.optDouble("outlineWidth", 10.0).toFloat(),
+                    outlineAlpha = blob.optDouble("outlineAlpha", 0.5).toFloat(),
                     blobsOnTop = blob.optBoolean("blobsOnTop", true)
                 ) else BlobModulation()
             )

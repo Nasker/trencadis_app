@@ -1,0 +1,52 @@
+{
+  "name": "Pixel Storm",
+  "version": 1,
+  "synth": {
+    "subOsc": true,
+    "sinOsc": false,
+    "sawOsc": true,
+    "sqrOsc": true,
+    "noiseOsc": false,
+    "cutoff": 0.35,
+    "resonance": 0.5,
+    "envelope": 0.3,
+    "attack": 0.0,
+    "release": 0.2,
+    "distortion": 0.15,
+    "fm": 0.2,
+    "fmAmount": 0.3,
+    "chorusFreq": 0.25,
+    "chorusMod": 0.35,
+    "delayFigure": 1.0,
+    "feedback": 0.25
+  },
+  "music": {
+    "scaleIndex": 6,
+    "keyIndex": 11,
+    "octaveIndex": 2,
+    "figureIndex": 4,
+    "tempo": 160.0
+  },
+  "acid": {
+    "enabled": true,
+    "hueAmount": 0.6,
+    "sizeAmount": 0.4,
+    "rotationAmount": 0.5,
+    "alphaAmount": 0.2,
+    "animationSpeed": 0.35,
+    "brightnessSizeBoost": 0.1
+  },
+  "acidPatternIndex": 0,
+  "selectionMode": "SEQUENCE",
+  "useFrontCamera": false,
+  "useBlobMode": false,
+  "blob": {
+    "hueBuckets": 16,
+    "minBlobSize": 50,
+    "maxBlobs": 500,
+    "blobBlend": 1.0,
+    "outlineWidth": 10.0,
+    "outlineAlpha": 0.5,
+    "blobsOnTop": true
+  }
+}

@@ -83,9 +83,8 @@ data class TrencadisState(
     val isAudioInitialized: Boolean = false,
     val useFrontCamera: Boolean = false,
     val acidModulation: AcidModulation = AcidModulation(),
-    val acidPatternIndex: Int = 9,  // Default to WAVE_INTERFERENCE (ACID)
-    val showAcidPanel: Boolean = false,
-    val showBlobPanel: Boolean = false,
+    val acidPatternIndex: Int = 5,  // Default to WAVE_INTERFERENCE (ACID) — last in reduced list
+    val showPalettePanel: Boolean = false,
     val showPresetPanel: Boolean = false,
     val presetNames: List<String> = emptyList(),
     val screenAspectRatio: Float = 9f / 16f,  // width/height, updated once canvas is measured
@@ -421,8 +420,7 @@ class TrencadisViewModel(application: Application) : AndroidViewModel(applicatio
         _state.update { it.copy(acidModulation = modulation) }
     }
     
-    fun setAcidPanel(show: Boolean) = _state.update { it.copy(showAcidPanel = show) }
-    fun setBlobPanel(show: Boolean) = _state.update { it.copy(showBlobPanel = show) }
+    fun setPalettePanel(show: Boolean) = _state.update { it.copy(showPalettePanel = show) }
     
     // Preset panel
     fun setPresetPanel(show: Boolean) = _state.update { it.copy(showPresetPanel = show) }

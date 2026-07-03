@@ -15,11 +15,7 @@ class AcidPattern {
     
     enum class PatternType {
         GRID_MULTIPLY,      // i*j - diagonal waves
-        TAN_ROWS,           // tan(j) - horizontal distortion
-        TAN_COLS,           // tan(i) - vertical distortion  
         WAVE_DIAGONAL,      // sin(i+j)+j - diagonal sine waves
-        TAN_DIAGONAL_SHIFT, // tan((i+j)+2) - shifted tangent
-        TAN_MULTIPLY,       // tan(i*j) - complex interference
         SUBTRACT_IJ,        // i-j - linear gradient
         SUBTRACT_JI,        // j-i - reverse gradient
         ADD_IJ,             // i+j - diagonal gradient
@@ -35,11 +31,7 @@ class AcidPattern {
         
         return when (patternType) {
             PatternType.GRID_MULTIPLY -> i * j
-            PatternType.TAN_ROWS -> tan(j)
-            PatternType.TAN_COLS -> tan(i)
             PatternType.WAVE_DIAGONAL -> sin(i + j) + j
-            PatternType.TAN_DIAGONAL_SHIFT -> tan((i + j) + 2)
-            PatternType.TAN_MULTIPLY -> tan(i * j)
             PatternType.SUBTRACT_IJ -> i - j
             PatternType.SUBTRACT_JI -> j - i
             PatternType.ADD_IJ -> i + j
@@ -111,11 +103,7 @@ class AcidPattern {
     companion object {
         val PATTERN_NAMES = listOf(
             "GRID" to PatternType.GRID_MULTIPLY,
-            "TAN-H" to PatternType.TAN_ROWS,
-            "TAN-V" to PatternType.TAN_COLS,
             "WAVE" to PatternType.WAVE_DIAGONAL,
-            "TAN-D" to PatternType.TAN_DIAGONAL_SHIFT,
-            "TAN-X" to PatternType.TAN_MULTIPLY,
             "GRAD1" to PatternType.SUBTRACT_IJ,
             "GRAD2" to PatternType.SUBTRACT_JI,
             "GRAD3" to PatternType.ADD_IJ,
@@ -129,7 +117,6 @@ class AcidPattern {
  */
 data class AcidModulation(
     val enabled: Boolean = false,
-    val multiShape: Boolean = false,   // true: use varied shapes, false: rectangles only
     val hueAmount: Float = 0.5f,      // 0-1: how much pattern affects hue
     val sizeAmount: Float = 0.3f,      // 0-1: how much pattern affects size
     val rotationAmount: Float = 0.5f,  // 0-1: how much pattern affects rotation
