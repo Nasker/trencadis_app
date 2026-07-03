@@ -1,0 +1,800 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Trencadís — hear what you see</title>
+<meta name="description" content="Trencadís is a real-time audiovisual synthesizer for Android: it breaks what the camera sees into mosaic shards and plays them, quantized to a scale and synced to your DAW.">
+<meta property="og:title" content="Trencadís — hear what you see">
+<meta property="og:description" content="An Android instrument that turns camera colour into mosaic and melody. MIDI-synced, Pure Data powered, born from a dream about a cyborg.">
+<meta property="og:image" content="https://nasker.github.io/trencadis_app/assets/portrait-output.jpg">
+<meta property="og:type" content="website">
+<style>
+*,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
+img{max-width:100%}
+</style>
+</head>
+<body><style>
+  :root{
+    --ground:#0F1120;
+    --panel:#151830;
+    --mortar:#1C2036;
+    --ceramic:#EFEAE0;
+    --muted:#9BA0B8;
+    --cobalt:#2E52E0;
+    --turquoise:#2EC4B6;
+    --amber:#F2A93B;
+    --rose:#E85D8A;
+    --display:"Bahnschrift","Franklin Gothic Medium","Arial Narrow",sans-serif;
+    --serif:Constantia,Georgia,"Times New Roman",serif;
+    --mono:"Cascadia Code",Consolas,"SF Mono",monospace;
+  }
+  html{scroll-behavior:smooth}
+  @media (prefers-reduced-motion: reduce){ html{scroll-behavior:auto} }
+  body{
+    background:var(--ground);
+    color:var(--ceramic);
+    font-family:var(--serif);
+    font-size:1.0625rem;
+    line-height:1.65;
+    overflow-x:hidden;
+  }
+  ::selection{background:var(--amber);color:var(--ground)}
+
+  a{color:var(--turquoise)}
+  a:focus-visible,button:focus-visible{outline:2px solid var(--amber);outline-offset:3px;border-radius:2px}
+
+  /* ---------- HERO ---------- */
+  .hero{
+    position:relative;
+    min-height:100vh;
+    min-height:100svh;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    padding:1.5rem;
+  }
+  #mosaic{
+    position:absolute;
+    inset:0;
+    width:100%;
+    height:100%;
+    cursor:crosshair;
+    touch-action:pan-y;
+  }
+  .plaque{
+    position:relative;
+    pointer-events:none;
+    max-width:44rem;
+    text-align:center;
+    background:rgba(15,17,32,.78);
+    -webkit-backdrop-filter:blur(7px);
+    backdrop-filter:blur(7px);
+    border:1px solid rgba(239,234,224,.22);
+    box-shadow:0 0 0 6px rgba(15,17,32,.35), 0 30px 80px rgba(0,0,0,.55);
+    padding:clamp(2rem,5vw,3.5rem) clamp(1.5rem,5vw,3.5rem);
+  }
+  .plaque a,.plaque .btn{pointer-events:auto}
+  .eyebrow{
+    font-family:var(--mono);
+    font-size:.72rem;
+    letter-spacing:.28em;
+    text-transform:uppercase;
+    color:var(--turquoise);
+    margin-bottom:1.1rem;
+  }
+  h1{
+    font-family:var(--display);
+    font-stretch:87.5%;
+    font-weight:700;
+    font-size:clamp(3.2rem,11vw,6.8rem);
+    line-height:.95;
+    letter-spacing:.015em;
+    text-transform:uppercase;
+    text-wrap:balance;
+  }
+  .tagline{
+    margin-top:1.2rem;
+    font-size:clamp(1.05rem,2.2vw,1.3rem);
+    font-style:italic;
+    color:var(--ceramic);
+    text-wrap:balance;
+  }
+  .tagline b{font-style:normal;color:var(--amber);font-weight:600}
+  .cta-row{
+    margin-top:2rem;
+    display:flex;
+    gap:.9rem;
+    justify-content:center;
+    flex-wrap:wrap;
+  }
+  .btn{
+    font-family:var(--display);
+    font-stretch:87.5%;
+    font-weight:600;
+    font-size:.95rem;
+    letter-spacing:.09em;
+    text-transform:uppercase;
+    text-decoration:none;
+    padding:.8rem 1.5rem;
+    border:1px solid transparent;
+    transition:transform .15s ease, box-shadow .15s ease;
+  }
+  .btn:hover{transform:translateY(-2px)}
+  .btn-primary{
+    background:var(--amber);
+    color:var(--ground);
+    box-shadow:0 6px 24px rgba(242,169,59,.35);
+  }
+  .btn-ghost{
+    color:var(--ceramic);
+    border-color:rgba(239,234,224,.45);
+  }
+  .btn-ghost:hover{border-color:var(--ceramic)}
+  .hint{
+    position:absolute;
+    bottom:1.4rem;
+    left:50%;
+    transform:translateX(-50%);
+    font-family:var(--mono);
+    font-size:.78rem;
+    letter-spacing:.12em;
+    color:var(--ceramic);
+    background:rgba(15,17,32,.72);
+    border:1px solid rgba(239,234,224,.25);
+    padding:.5rem 1rem;
+    white-space:nowrap;
+    pointer-events:none;
+    transition:opacity 1.2s ease;
+  }
+  .hint.dim{opacity:.35}
+  .hint .note{color:var(--amber)}
+
+  /* ---------- SECTIONS ---------- */
+  main{display:block}
+  section{padding:clamp(4rem,9vw,7rem) 1.5rem}
+  .col{max-width:44rem;margin:0 auto}
+  .wide{max-width:64rem;margin:0 auto}
+
+  .kicker{
+    font-family:var(--mono);
+    font-size:.72rem;
+    letter-spacing:.28em;
+    text-transform:uppercase;
+    color:var(--turquoise);
+    display:flex;
+    align-items:center;
+    gap:.65rem;
+    margin-bottom:1rem;
+  }
+  .kicker::before{
+    content:"";
+    width:.65rem;
+    height:.65rem;
+    background:var(--amber);
+    transform:rotate(14deg);
+    flex:none;
+  }
+  h2{
+    font-family:var(--display);
+    font-stretch:87.5%;
+    font-weight:700;
+    font-size:clamp(1.9rem,4.5vw,3rem);
+    line-height:1.05;
+    text-transform:uppercase;
+    letter-spacing:.02em;
+    margin-bottom:1.6rem;
+    text-wrap:balance;
+  }
+  p{margin-bottom:1.15rem;color:var(--ceramic)}
+  p.dim{color:var(--muted)}
+  em{color:var(--amber);font-style:italic}
+
+  /* story */
+  .story{border-top:1px solid var(--mortar)}
+  .dream{
+    margin:2.2rem 0;
+    padding:1.6rem 1.8rem;
+    border-left:3px solid var(--rose);
+    background:var(--panel);
+  }
+  .dream p{font-size:1.25rem;font-style:italic;margin-bottom:.7rem}
+  .dream .who{font-family:var(--mono);font-style:normal;font-size:.75rem;letter-spacing:.15em;color:var(--muted);text-transform:uppercase}
+  .dream .waking{color:var(--amber);margin-top:1rem;margin-bottom:0}
+
+  /* timeline */
+  .timeline{margin-top:3rem;display:flex;flex-direction:column;gap:1.7rem;border-left:1px solid var(--mortar);padding-left:1.6rem}
+  .tl{position:relative}
+  .tl::before{
+    content:"";
+    position:absolute;
+    left:-2.05rem;
+    top:.35rem;
+    width:.8rem;
+    height:.8rem;
+    transform:rotate(18deg);
+  }
+  .tl:nth-child(1)::before{background:var(--cobalt)}
+  .tl:nth-child(2)::before{background:var(--turquoise)}
+  .tl:nth-child(3)::before{background:var(--rose)}
+  .tl:nth-child(4)::before{background:var(--amber)}
+  .tl .yr{font-family:var(--mono);font-size:.8rem;letter-spacing:.15em;color:var(--muted)}
+  .tl h3{font-family:var(--display);font-stretch:87.5%;font-weight:600;font-size:1.2rem;text-transform:uppercase;letter-spacing:.04em;margin:.25rem 0 .35rem}
+  .tl p{margin:0;color:var(--muted)}
+
+  /* mapping */
+  .mapping{background:var(--panel);border-top:1px solid var(--mortar);border-bottom:1px solid var(--mortar)}
+  .map-list{display:flex;flex-direction:column;border-top:1px solid var(--mortar)}
+  .map-row{
+    display:grid;
+    grid-template-columns:9.5rem 2.5rem 1fr;
+    gap:1rem;
+    align-items:baseline;
+    padding:1.15rem .25rem;
+    border-bottom:1px solid var(--mortar);
+  }
+  .map-row .from{font-family:var(--mono);font-size:.85rem;letter-spacing:.1em;text-transform:uppercase}
+  .map-row .arrow{font-family:var(--mono);color:var(--muted);text-align:center}
+  .map-row .to b{font-family:var(--display);font-stretch:87.5%;font-weight:600;text-transform:uppercase;letter-spacing:.05em;margin-right:.5rem}
+  .map-row .to{color:var(--muted)}
+  .map-row:nth-child(1) .from{color:var(--rose)}
+  .map-row:nth-child(2) .from{color:var(--turquoise)}
+  .map-row:nth-child(3) .from{color:var(--amber)}
+  .map-row:nth-child(4) .from{color:var(--cobalt)}
+  .map-row:nth-child(5) .from{color:var(--ceramic)}
+  @media (max-width:560px){
+    .map-row{grid-template-columns:1fr;gap:.2rem}
+    .map-row .arrow{display:none}
+  }
+
+  /* features */
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(17rem,1fr));gap:1.2rem;margin-top:2.4rem}
+  .card{
+    background:var(--panel);
+    border:1px solid var(--mortar);
+    padding:1.6rem;
+  }
+  .card h3{
+    font-family:var(--display);
+    font-stretch:87.5%;
+    font-weight:600;
+    font-size:1.15rem;
+    text-transform:uppercase;
+    letter-spacing:.05em;
+    margin-bottom:.7rem;
+    padding-bottom:.7rem;
+    border-bottom:2px solid;
+  }
+  .card:nth-child(1) h3{border-color:var(--turquoise)}
+  .card:nth-child(2) h3{border-color:var(--rose)}
+  .card:nth-child(3) h3{border-color:var(--amber)}
+  .card:nth-child(4) h3{border-color:var(--cobalt)}
+  .card p{color:var(--muted);margin-bottom:0;font-size:.98rem}
+  .card p + p{margin-top:.7rem}
+
+  /* chips */
+  .chip-block{margin-top:2.6rem}
+  .chip-label{font-family:var(--mono);font-size:.72rem;letter-spacing:.24em;text-transform:uppercase;color:var(--muted);margin-bottom:.9rem}
+  .chips{display:flex;flex-wrap:wrap;gap:.5rem}
+  .chip{
+    font-family:var(--mono);
+    font-size:.8rem;
+    padding:.35rem .75rem;
+    border:1px solid var(--mortar);
+    background:var(--panel);
+    color:var(--ceramic);
+  }
+  .chip.hot{border-color:var(--rose);color:var(--rose)}
+
+  /* midi band */
+  .midi{border-top:1px solid var(--mortar)}
+  .midi blockquote{
+    font-size:clamp(1.3rem,3vw,1.8rem);
+    font-style:italic;
+    line-height:1.45;
+    margin:2rem 0;
+    text-wrap:balance;
+  }
+  .midi blockquote b{color:var(--turquoise);font-style:normal;font-weight:600}
+
+  /* figures & gallery */
+  figure.shot{margin:2.2rem 0 0;border:1px solid var(--mortar);background:var(--panel);padding:.6rem}
+  figure.shot img{display:block;width:100%;height:auto}
+  figure.shot figcaption{
+    font-family:var(--mono);
+    font-size:.74rem;
+    letter-spacing:.12em;
+    text-transform:uppercase;
+    color:var(--muted);
+    padding:.85rem .4rem .35rem;
+    line-height:1.7;
+  }
+  figure.shot figcaption b{color:var(--amber);font-weight:400}
+  .tl figure.shot{margin-top:1.1rem}
+  .duo{display:grid;grid-template-columns:1fr 1fr;gap:1.2rem;align-items:start;margin-top:2.4rem}
+  @media (max-width:640px){ .duo{grid-template-columns:1fr} }
+
+  /* video placeholder */
+  .video-slot{
+    position:relative;
+    aspect-ratio:16/9;
+    background:var(--panel);
+    border:1px dashed rgba(239,234,224,.32);
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    justify-content:center;
+    gap:1.4rem;
+    margin-top:2.4rem;
+  }
+  .video-slot .play{
+    width:4.5rem;height:4.5rem;
+    background:var(--amber);
+    transform:rotate(14deg);
+    display:flex;align-items:center;justify-content:center;
+    box-shadow:0 10px 34px rgba(242,169,59,.3);
+  }
+  .video-slot .play::after{
+    content:"";
+    border-left:1.35rem solid var(--ground);
+    border-top:.85rem solid transparent;
+    border-bottom:.85rem solid transparent;
+    transform:rotate(-14deg);
+    margin-left:.2rem;
+  }
+  .video-slot p{
+    font-family:var(--mono);
+    font-size:.78rem;
+    letter-spacing:.14em;
+    text-transform:uppercase;
+    color:var(--muted);
+    margin:0;
+    text-align:center;
+    padding:0 1.5rem;
+  }
+
+  /* get it */
+  .get{background:var(--panel);border-top:1px solid var(--mortar)}
+  .get .codebox{
+    font-family:var(--mono);
+    font-size:.9rem;
+    background:var(--ground);
+    border:1px solid var(--mortar);
+    padding:1.2rem 1.4rem;
+    margin:1.6rem 0;
+    overflow-x:auto;
+    white-space:pre;
+    line-height:1.8;
+    color:var(--ceramic);
+  }
+  .get .codebox .c{color:var(--muted)}
+  .fineprint{font-family:var(--mono);font-size:.8rem;color:var(--muted);line-height:2}
+  .fineprint b{color:var(--ceramic);font-weight:400}
+
+  footer{
+    padding:3rem 1.5rem 3.5rem;
+    text-align:center;
+    border-top:1px solid var(--mortar);
+  }
+  footer .heart{color:var(--rose)}
+  footer p{margin-bottom:.4rem}
+  footer .def{font-style:italic;color:var(--muted);font-size:.95rem}
+  footer .credit{font-family:var(--mono);font-size:.78rem;letter-spacing:.12em;color:var(--muted);margin-top:1.2rem}
+</style>
+
+<header class="hero" id="hero">
+  <canvas id="mosaic" aria-hidden="true"></canvas>
+  <div class="plaque">
+    <p class="eyebrow">An audiovisual synthesizer for Android</p>
+    <h1>Trencadís</h1>
+    <p class="tagline">It breaks what the camera sees into a mosaic of shards — <b>and plays them.</b> Colour becomes pitch, light becomes loudness, and everything lands in key.</p>
+    <div class="cta-row">
+      <a class="btn btn-primary" href="https://github.com/Nasker/trencadis_app">View on GitHub</a>
+      <a class="btn btn-ghost" href="#story">The story ↓</a>
+    </div>
+  </div>
+  <p class="hint" id="hint"><span class="note">♪</span> touch the mosaic — every colour is a note</p>
+</header>
+
+<main>
+  <section class="story" id="story">
+    <div class="col">
+      <p class="kicker">The lore</p>
+      <h2>Born from a dream about a cyborg</h2>
+      <p>Neil Harbisson was born with achromatopsia — he sees the world entirely in greyscale. So he implanted an antenna that translates colour into sound, with green tuned to 440&nbsp;Hz, the middle of the visible spectrum. He became the first person officially recognised as a cyborg by a state, learned to <em>hear colour</em>, and turned his condition into his art.</p>
+      <p>Around the same time, I was building something adjacent: a <em>Holophonic User Interface</em> — spatial sound that let blind users hear where the icons were on a screen and navigate towards them. It won a business-ideas contest and became my degree thesis. It never shipped. But it left an idea humming in the back of my head.</p>
+      <div class="dream">
+        <p>“I can hear colour.” <span class="who">— Neil, in the dream</span></p>
+        <p>“I can make people hear where things are in a virtual space.” <span class="who">— me, in the dream</span></p>
+        <p class="waking">I woke up thinking: so what if you could hear <em>where the colours are</em>?</p>
+      </div>
+      <p>That dream really happened. What followed was a Processing sketch that grew into a beautiful little monster: the camera feed crushed into fat pixels, each one rotated by its hue until the image looked almost cubist, while a Pure&nbsp;Data synth underneath sang whatever the colours told it to — quantized to a musical scale, so it was always harmonic, never noise. The scale-quantizing idea came from another project of mine: a one-string bass you could lock to any scale and improvise on like a virtuoso.</p>
+      <div class="timeline">
+        <div class="tl">
+          <span class="yr">2013</span>
+          <h3>The Processing monster</h3>
+          <p>A sketch grows out of control but works. Camera in, cubist pixels out, libpd singing underneath.</p>
+          <figure class="shot">
+            <img src="assets/sonochromaceed-2013.jpg" alt="A 2013 Mac desktop running sonoChromAceed, a Processing sketch showing a camera feed crushed into cubist pixels beside synth sliders, with Processing code and an Arduino sketch open behind it" width="1280" height="800" loading="lazy">
+            <figcaption><b>sonoChromAceed</b> · 24 oct 2013, 16:00 · the Processing original — libpd sliders on the right, the monster's code behind</figcaption>
+          </figure>
+        </div>
+        <div class="tl">
+          <span class="yr">2013 · six months later</span>
+          <h3>It sounds like music</h3>
+          <p>One holiday of stubborn coding later, colour is melody, quantized to a scale, surprisingly nice to listen to.</p>
+        </div>
+        <div class="tl">
+          <span class="yr">2026</span>
+          <h3>Reborn in Kotlin</h3>
+          <p>Ported to Kotlin and Jetpack Compose with Claude Code as copilot. Blob detection, convex-hull shards, mortar gaps — it finally earns the name <em>Trencadís</em>, after Gaudí's broken-tile mosaics.</p>
+        </div>
+        <div class="tl">
+          <span class="yr">Now</span>
+          <h3>A camera that jams</h3>
+          <p>MIDI clock in, notes out. It locks to your DAW and arpeggiates in rhythm and harmony with the rest of the band.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="mapping" id="mapping">
+    <div class="col">
+      <p class="kicker">How it works</p>
+      <h2>The synesthesia engine</h2>
+      <p class="dim">Every shard the camera finds is translated, property by property, into sound. Nothing is random — point it at the same wall twice and it plays the same song.</p>
+      <div class="map-list">
+        <div class="map-row">
+          <span class="from">Hue</span><span class="arrow">→</span>
+          <span class="to"><b>Pitch</b> quantized to the scale you choose, so every colour lands on a right note. Green sits near 440&nbsp;Hz — a nod to Neil.</span>
+        </div>
+        <div class="map-row">
+          <span class="from">Saturation</span><span class="arrow">→</span>
+          <span class="to"><b>Filter</b> vivid colours open the filter bright; washed-out ones stay dark and soft.</span>
+        </div>
+        <div class="map-row">
+          <span class="from">Brightness</span><span class="arrow">→</span>
+          <span class="to"><b>Loudness &amp; size</b> bright shards ring louder and draw bigger on screen.</span>
+        </div>
+        <div class="map-row">
+          <span class="from">Position X</span><span class="arrow">→</span>
+          <span class="to"><b>Stereo pan</b> left of frame is left of the mix.</span>
+        </div>
+        <div class="map-row">
+          <span class="from">Position Y</span><span class="arrow">→</span>
+          <span class="to"><b>Depth</b> distance you can hear.</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="inout">
+    <div class="wide">
+      <p class="kicker">In / out</p>
+      <h2>What it sees · what it makes</h2>
+      <p class="dim">An oil portrait on the studio wall, and the same painting through Trencadís: colour blobs hulled into shards, hues quantized to a scale, control panels waiting at the edges of the screen. The green dot in the corner is MIDI clock — alive and counting.</p>
+      <div class="duo">
+        <figure class="shot">
+          <img src="assets/portrait-input.jpg" alt="Expressionist oil portrait of a man wearing a beret and a blue scarf, painted in thick strokes of red, yellow, green and blue" width="720" height="1560" loading="lazy">
+          <figcaption><b>Input</b> · oil on board, thick strokes, no electricity involved</figcaption>
+        </figure>
+        <figure class="shot">
+          <img src="assets/portrait-output.jpg" alt="The same portrait rendered by the Trencadís app as a mosaic of flat colour shards, with round control icons along the screen edges and a green MIDI clock indicator" width="720" height="1560" loading="lazy">
+          <figcaption><b>Output</b> · the same painting, broken into tiles and sung</figcaption>
+        </figure>
+      </div>
+    </div>
+  </section>
+
+  <section id="features">
+    <div class="wide">
+      <p class="kicker">Under the tiles</p>
+      <h2>A real synth wearing a mosaic</h2>
+      <div class="grid">
+        <div class="card">
+          <h3>Sound engine</h3>
+          <p>Pure Data running on-device via libpd. Five mixable oscillators — sub, sine, saw, square, noise — through a resonant filter with envelope modulation.</p>
+          <p>FM, chorus, delay and reverb on top. Tap tempo, seven octaves of range.</p>
+        </div>
+        <div class="card">
+          <h3>Mosaic vision</h3>
+          <p>Connected-component blob detection finds regions of colour; convex-hull polygons with mortar-line gaps render them as authentic broken tiles.</p>
+          <p>Temporal smoothing lets shapes evolve organically instead of flickering, plus ten animated acid patterns when you want to melt.</p>
+        </div>
+        <div class="card">
+          <h3>Ways to play</h3>
+          <p>Four pixel-selection modes: <em>Sequence</em> cycles melodically through the frame, <em>Brightest</em> chases light sources, <em>Center</em> holds a stable drone, and <em>Pointer</em> turns your finger into a theremin.</p>
+        </div>
+        <div class="card">
+          <h3>In the rig</h3>
+          <p>USB MIDI note output and clock reception, Bluetooth LE MIDI peripheral mode, 16 channels, and a visual clock indicator.</p>
+          <p>Send it a chord or scale change from your DAW and it re-tunes on the beat.</p>
+        </div>
+      </div>
+      <div class="chip-block">
+        <p class="chip-label">Twelve scales</p>
+        <div class="chips">
+          <span class="chip">Ionian</span><span class="chip">Dorian</span><span class="chip">Phrygian</span>
+          <span class="chip">Lydian</span><span class="chip">Mixolydian</span><span class="chip">Aeolian</span>
+          <span class="chip">Locrian</span><span class="chip">Harmonic Minor</span><span class="chip hot">Spanish Gipsy</span>
+          <span class="chip">Hawaiian</span><span class="chip">Blues</span><span class="chip">Japanese</span>
+        </div>
+      </div>
+      <div class="chip-block">
+        <p class="chip-label">Six bundled presets · unlimited of your own, saved as JSON</p>
+        <div class="chips">
+          <span class="chip">Acid Trip</span><span class="chip">Ambient Pad</span><span class="chip">Gipsy Dream</span>
+          <span class="chip hot">Face Melting</span><span class="chip">Ringing Trip</span><span class="chip">Typical Seq</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="midi">
+    <div class="col">
+      <p class="kicker">The uncommon part</p>
+      <h2>Point it at anything. It plays in your key.</h2>
+      <blockquote>Sync it to your DAW and Trencadís becomes an <b>arpeggiator whose keyboard is the visible world</b> — locked to your clock, tuned to your chords, improvising from whatever the lens is looking at.</blockquote>
+      <p class="dim">A houseplant, a traffic light, your bandmate's shirt: everything the camera sees becomes a voice in the arrangement. Few instruments work this way — which is exactly the point.</p>
+    </div>
+  </section>
+
+  <section id="demo">
+    <div class="col">
+      <p class="kicker">Demo film</p>
+      <h2>See it move, hear it sing</h2>
+      <!-- VIDEO PLACEHOLDER: when the demo is recorded, replace the .video-slot div below
+           with the embed, e.g.
+           <div style="aspect-ratio:16/9;margin-top:2.4rem">
+             <iframe width="100%" height="100%" src="https://www.youtube.com/embed/VIDEO_ID"
+                     title="Trencadís demo" frameborder="0" allowfullscreen></iframe>
+           </div>
+           (iframes work on GitHub Pages; the Artifact preview blocks external embeds) -->
+      <div class="video-slot">
+        <div class="play" aria-hidden="true"></div>
+        <p>Demo in production — meanwhile, the mosaic up top is playable</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="get" id="get">
+    <div class="col">
+      <p class="kicker">Get it</p>
+      <h2>Build it, break it, make mosaics</h2>
+      <div class="codebox"><span class="c"># clone and install on a connected device</span>
+git clone https://github.com/Nasker/trencadis_app.git
+cd trencadis_app
+./gradlew installDebug</div>
+      <p class="fineprint">
+        <b>Requires</b> · Android 7.0+ (API 24) · camera permission · Bluetooth permission for BLE MIDI<br>
+        <b>Built with</b> · Kotlin · Jetpack Compose · CameraX · pd-for-android · Material 3<br>
+        <b>License</b> · The Unlicense — public domain. Take the tiles, build your own mosaic.
+      </p>
+      <div class="cta-row" style="justify-content:flex-start;margin-top:1.8rem">
+        <a class="btn btn-primary" href="https://github.com/Nasker/trencadis_app">github.com/Nasker/trencadis_app</a>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <p>Made with <span class="heart">❤</span> and broken tiles</p>
+  <p class="def">trencadís — the Catalan mosaic technique, beloved of Gaudí, of building new wholes from broken ceramic.</p>
+  <p class="credit">A NASKER PROJECT · 2013 – ∞</p>
+</footer>
+
+<script>
+(function(){
+  "use strict";
+  var canvas = document.getElementById('mosaic');
+  var ctx = canvas.getContext('2d');
+  var hero = document.getElementById('hero');
+  var hint = document.getElementById('hint');
+  var reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  // palette: cobalt, deep cobalt, turquoise, deep turquoise, amber, rose, indigo tile
+  var COLORS = [
+    [46,82,224],[35,60,168],[46,196,182],[24,132,124],
+    [242,169,59],[232,93,138],[27,31,58]
+  ];
+  var CERAMIC = [239,234,224];
+
+  var W=0, H=0, cell=56, cols=0, rows=0, shards=[];
+
+  function field(x,y,t){
+    var v = 0.5
+      + 0.28*Math.sin(x*0.0042 + t*0.35)
+      + 0.22*Math.sin(y*0.0051 - t*0.22 + x*0.0017)
+      + 0.12*Math.sin((x+y)*0.003 + t*0.15);
+    return Math.min(0.999, Math.max(0, v));
+  }
+  function pickColor(s,t){
+    if (s.r0 < 0.15) return CERAMIC.slice();
+    var v = field(s.cx, s.cy, t);
+    var c = COLORS[Math.floor(v*COLORS.length)];
+    var sh = s.shade;
+    return [c[0]*sh, c[1]*sh, c[2]*sh];
+  }
+
+  function build(){
+    var dpr = Math.min(window.devicePixelRatio||1, 2);
+    W = hero.clientWidth; H = hero.clientHeight;
+    canvas.width = Math.round(W*dpr); canvas.height = Math.round(H*dpr);
+    ctx.setTransform(dpr,0,0,dpr,0,0);
+    cell = Math.max(42, Math.min(64, W/20));
+    cols = Math.ceil(W/cell)+2;
+    rows = Math.ceil(H/cell)+2;
+    // jittered grid points, origin shifted half a cell off-canvas
+    var pts = [];
+    for (var r=0; r<=rows; r++){
+      pts.push([]);
+      for (var c=0; c<=cols; c++){
+        pts[r].push([
+          (c-0.5)*cell + (Math.random()-0.5)*cell*0.62,
+          (r-0.5)*cell + (Math.random()-0.5)*cell*0.62
+        ]);
+      }
+    }
+    shards = [];
+    for (r=0; r<rows; r++){
+      for (c=0; c<cols; c++){
+        var q = [pts[r][c], pts[r][c+1], pts[r+1][c+1], pts[r+1][c]];
+        var cx=0, cy=0, i;
+        for (i=0;i<4;i++){ cx+=q[i][0]/4; cy+=q[i][1]/4; }
+        var poly = [];
+        for (i=0;i<4;i++){
+          poly.push([ cx + (q[i][0]-cx)*0.90, cy + (q[i][1]-cy)*0.90 ]);
+        }
+        var s = { poly:poly, cx:cx, cy:cy, r0:Math.random(),
+                  shade:0.88+Math.random()*0.24, flash:0, col:null, tgt:null };
+        s.col = pickColor(s, 0);
+        s.tgt = s.col.slice();
+        shards.push(s);
+      }
+    }
+    draw();
+  }
+
+  function draw(){
+    ctx.fillStyle = '#141830'; // mortar
+    ctx.fillRect(0,0,W,H);
+    for (var i=0;i<shards.length;i++){
+      var s = shards[i], p = s.poly;
+      ctx.beginPath();
+      ctx.moveTo(p[0][0],p[0][1]);
+      ctx.lineTo(p[1][0],p[1][1]);
+      ctx.lineTo(p[2][0],p[2][1]);
+      ctx.lineTo(p[3][0],p[3][1]);
+      ctx.closePath();
+      ctx.fillStyle = 'rgb('+(s.col[0]|0)+','+(s.col[1]|0)+','+(s.col[2]|0)+')';
+      ctx.fill();
+      if (s.flash > 0.02){
+        ctx.strokeStyle = 'rgba(239,234,224,'+s.flash.toFixed(2)+')';
+        ctx.lineWidth = 2.5;
+        ctx.stroke();
+      }
+    }
+  }
+
+  var T = 0, last = 0;
+  function frame(ts){
+    requestAnimationFrame(frame);
+    if (ts - last < 33) return;
+    var dt = Math.min(0.1, (ts-last)/1000);
+    last = ts; T += dt;
+    if (!reduced){
+      for (var k=0;k<3;k++){
+        var s = shards[(Math.random()*shards.length)|0];
+        s.tgt = pickColor(s, T);
+      }
+    }
+    var ease = 1 - Math.exp(-dt*2.2);
+    for (var i=0;i<shards.length;i++){
+      var sh = shards[i];
+      sh.col[0] += (sh.tgt[0]-sh.col[0])*ease;
+      sh.col[1] += (sh.tgt[1]-sh.col[1])*ease;
+      sh.col[2] += (sh.tgt[2]-sh.col[2])*ease;
+      if (sh.flash > 0) sh.flash = Math.max(0, sh.flash - dt*1.8);
+    }
+    draw();
+  }
+
+  /* ---------- audio: hue -> pitch, Spanish Gipsy scale, green = 440 Hz ---------- */
+  var ac=null, master=null;
+  var SCALE = [0,1,4,5,7,8,10];
+  function ensureAudio(){
+    if (ac) return;
+    var AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) return;
+    ac = new AC();
+    master = ac.createGain();
+    master.gain.value = 0.55;
+    master.connect(ac.destination);
+    var dly = ac.createDelay(1.0); dly.delayTime.value = 0.31;
+    var fb = ac.createGain(); fb.gain.value = 0.34;
+    var wet = ac.createGain(); wet.gain.value = 0.22;
+    master.connect(dly); dly.connect(fb); fb.connect(dly);
+    dly.connect(wet); wet.connect(ac.destination);
+  }
+  function hueOf(c){
+    var r=c[0]/255, g=c[1]/255, b=c[2]/255;
+    var mx=Math.max(r,g,b), mn=Math.min(r,g,b), d=mx-mn;
+    if (d < 0.001) return 120; // neutrals sing green
+    var h;
+    if (mx===r) h = ((g-b)/d) % 6;
+    else if (mx===g) h = (b-r)/d + 2;
+    else h = (r-g)/d + 4;
+    return ((h*60)+360) % 360;
+  }
+  function playShard(s, px){
+    ensureAudio();
+    if (!ac) return;
+    if (ac.state === 'suspended') ac.resume();
+    var hue = hueOf(s.col);
+    var lum = (0.2126*s.col[0] + 0.7152*s.col[1] + 0.0722*s.col[2]) / 255;
+    // 14 scale degrees over two octaves; hue 120 (green) lands on degree 7 = A440
+    var idx = (Math.floor(((hue - 120 + 360) % 360) / 360 * 14) + 7) % 14;
+    var semis = SCALE[idx % 7] + 12*Math.floor(idx/7);
+    var freq = 220 * Math.pow(2, semis/12);
+    var t0 = ac.currentTime;
+    var osc = ac.createOscillator();
+    osc.type = 'triangle';
+    osc.frequency.value = freq;
+    var flt = ac.createBiquadFilter();
+    flt.type = 'lowpass';
+    flt.frequency.value = 500 + lum*2800;
+    flt.Q.value = 5;
+    var g = ac.createGain();
+    g.gain.setValueAtTime(0.0001, t0);
+    g.gain.exponentialRampToValueAtTime(0.10 + lum*0.16, t0+0.012);
+    g.gain.exponentialRampToValueAtTime(0.0001, t0+0.55);
+    var out = g;
+    if (ac.createStereoPanner){
+      var pan = ac.createStereoPanner();
+      pan.pan.value = Math.max(-1, Math.min(1, (px/W)*2 - 1));
+      g.connect(pan); out = pan;
+    }
+    osc.connect(flt); flt.connect(g); out.connect(master);
+    osc.start(t0); osc.stop(t0+0.6);
+    s.flash = 1;
+  }
+
+  function shardAt(x,y){
+    var c = Math.min(cols-1, Math.max(0, Math.floor(x/cell + 0.5)));
+    var r = Math.min(rows-1, Math.max(0, Math.floor(y/cell + 0.5)));
+    return shards[r*cols + c] || null;
+  }
+
+  var lastShard = null, lastNote = 0, played = false;
+  function trigger(e){
+    var rect = canvas.getBoundingClientRect();
+    var x = e.clientX - rect.left, y = e.clientY - rect.top;
+    var s = shardAt(x,y);
+    if (!s) return;
+    var now = performance.now();
+    if (s === lastShard && now - lastNote < 220) return;
+    if (now - lastNote < 70) return;
+    lastShard = s; lastNote = now;
+    playShard(s, x);
+    if (!played){ played = true; hint.classList.add('dim'); hint.innerHTML = '<span class="note">♪</span> you are playing the Spanish Gipsy scale'; }
+  }
+  canvas.addEventListener('pointerdown', function(e){ trigger(e); });
+  canvas.addEventListener('pointermove', function(e){
+    if (e.pointerType === 'mouse' && e.buttons === 0) return;
+    if (!played) return; // require a first tap before drag-play
+    trigger(e);
+  });
+
+  var rsz = null;
+  window.addEventListener('resize', function(){
+    clearTimeout(rsz);
+    rsz = setTimeout(build, 150);
+  });
+
+  build();
+  requestAnimationFrame(frame);
+})();
+</script>
+
+</body>
+</html>
