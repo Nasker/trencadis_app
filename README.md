@@ -21,8 +21,15 @@
 - **Amp envelope** — Attack & release shaping
 - **Effects** — FM synthesis, chorus, delay with feedback, reverb
 
+### 🎨 **Cubist Blob Mode**
+- **Color-region detection** — Groups similar-colored pixels into mosaic tiles using connected-component analysis
+- **Convex hull polygons** — Each color region rendered as a simplified angular polygon
+- **Grout gaps** — Shapes contract from their boundaries, creating authentic trencadís-style mortar lines
+- **Temporal smoothing** — Colors blend across frames for fluid, organic shape evolution
+- **Full parameter control** — Hue buckets, min/max blob size, opacity, outline, tile overlay, draw order
+
 ### 🌀 **Acid Visual Patterns**
-- **12 psychedelic patterns** — Ripple, Spiral, Plasma, Checkerboard, Diamond Wave, Interference, Vortex, Cellular, Fractal Noise, Wave Interference, Moiré, Kaleidoscope
+- **10 animated patterns** — Grid, Tan-H, Tan-V, Wave, Tan-D, Tan-X, Grad1, Grad2, Grad3, Acid
 - **Modulation controls** — Hue, size, rotation, alpha, animation speed
 - **Multi-shape mode** — Rectangles, circles, triangles, diamonds, hexagons, stars
 
@@ -39,12 +46,21 @@
 - **Instant recall** of all synth, music, and visual settings
 - **JSON format** — Easy to backup and share
 - **Delete with confirmation** — No accidental losses
+- **6 bundled presets** — Acid Trip, Ambient Pad, Gipsy Dream, Face Melting, Ringing Trip, Typical Seq
 
 ### 📱 **Intuitive Touch UI**
 - **Edge-triggered panels** — Drag from edges or tap icons
 - **Double-tap to dismiss** — Quick panel closing
 - **Front/back camera** — Switch with one tap
 - **Hide UI** — Double-tap for immersive mode
+
+### 🎹 **MIDI Connectivity**
+- **USB MIDI out** — Send notes to a DAW via USB cable
+- **BLE MIDI peripheral** — Advertise as a Bluetooth MIDI device, wireless note output
+- **MIDI Clock sync** — Receive MIDI Clock (0xF8) from DAW, auto-derive BPM, lock tempo
+- **3 routing modes** — Internal Pd only, MIDI out only, or both simultaneously
+- **16-channel selection** — Choose which MIDI channel to send on
+- **Clock indicator** — Colored dot on the Synth icon: green = clock locked, yellow = MIDI enabled, off = disconnected
 
 ---
 
@@ -62,6 +78,7 @@
 - Android 7.0 (API 24) or higher
 - Camera permission
 - Audio output (speakers or headphones recommended)
+- Bluetooth permissions (Android 12+) — only for BLE MIDI feature
 
 ### From Source
 ```bash
@@ -99,11 +116,12 @@ export KEY_PASSWORD=your_key_password
 
 | Icon | Location | Panel |
 |------|----------|-------|
-| 📷 | Left (1/4) | **Modes** — Pixel selection & camera |
-| 🌀 | Left (3/4) | **Acid** — Visual pattern effects |
+| 📷 | Left top | **Modes** — Pixel selection & camera |
+| 🎨 | Left middle | **Blob** — Cubist mosaic parameters |
+| 🌀 | Left bottom | **Acid** — Visual pattern effects |
 | 𝄞 | Top | **Scales** — Musical scale selection |
 | ♪ | Bottom | **Keys** — Key, octave, figure, tempo |
-| ∿ | Right (1/4) | **Synth** — Oscillators, filter, effects |
+| ∿ | Right (1/4) | **Synth** — Oscillators, filter, effects, MIDI |
 | 💾 | Right (3/4) | **Presets** — Save & load settings |
 
 ### Gestures
@@ -118,6 +136,8 @@ export KEY_PASSWORD=your_key_password
 - 🎹 **Pointer mode** turns the screen into a playable instrument
 - 🌀 **Acid patterns** sync beautifully with slower tempos
 - 💾 **Save presets** before experimenting wildly!
+- 🎹 **Connect a DAW** via USB MIDI for clock-synced performance
+- 📶 **BLE MIDI** lets you go wireless — pair as a Bluetooth MIDI device
 
 ---
 
@@ -127,34 +147,58 @@ export KEY_PASSWORD=your_key_password
 trencadis_app/
 ├── app/src/main/java/com/example/trencadisapp/
 │   ├── MainActivity.kt              # Entry point
-│   ├── TrencadisViewModel.kt        # State management & business logic
+│   ├── TrencadisViewModel.kt        # State management, MIDI routing, audio + clock wiring
 │   ├── audio/
-│   │   ├── PdAudioEngine.kt         # Pure Data integration
-│   │   └── MusicConstants.kt        # Scales, frequencies, mappings
+│   │   ├── PdAudioEngine.kt         # Pure Data integration (libpd wrapper)
+│   │   └── MusicConstants.kt        # Scales, frequencies, color→sound mappings
 │   ├── camera/
-│   │   ├── CameraPixelAnalyzer.kt   # Real-time pixel extraction
-│   │   ├── PixelData.kt             # Pixel color/position data
-│   │   └── PixelGrid.kt             # Grid management
+│   │   ├── CameraPixelAnalyzer.kt   # YUV→Bitmap→PixelGrid ~30fps, temporal smoothing
+│   │   ├── PixelData.kt             # PixelData & PixelGrid data classes
+│   │   └── BlobDetector.kt          # Connected components + convex hull blob detection
+│   ├── midi/                        # MIDI connectivity layer
+│   │   ├── MidiState.kt             # MIDI state data class + MidiOutputMode enum
+│   │   ├── MidiBus.kt               # Global event bus for MIDI I/O ports
+│   │   ├── MidiClockSource.kt       # USB MIDI Clock receiver → BPM + beat flows
+│   │   ├── MidiNoteDestination.kt   # USB MIDI Note On/Off sender
+│   │   ├── BleMidiPeripheral.kt     # BLE MIDI GATT server + advertising
+│   │   ├── BleNoteDestination.kt    # BLE MIDI Note On/Off sender
+│   │   ├── NoteRouter.kt            # Fan-out router to multiple NoteDestinations
+│   │   ├── PdNoteDestination.kt     # Wraps PdAudioEngine as a NoteDestination
+│   │   └── TrencadisMidiDeviceService.kt  # Virtual MIDI device service (DAW sees app)
+│   ├── sync/                        # Transport abstraction interfaces
+│   │   ├── ClockSource.kt           # Interface: isConnected, bpmFlow, beatFlow, key/scale
+│   │   └── NoteDestination.kt       # Interface: noteOn, noteOff, isAvailable
 │   ├── preset/
-│   │   └── PresetManager.kt         # JSON preset save/load
+│   │   └── PresetManager.kt         # JSON preset save/load, bundled preset copy
 │   └── ui/
-│       ├── TrencadisScreen.kt       # Main composable screen
-│       ├── CubistCanvas.kt          # Custom canvas rendering
-│       ├── AcidPattern.kt           # Visual pattern generators
+│       ├── TrencadisScreen.kt       # Main composable, 7 edge-triggered panels
+│       ├── CubistCanvas.kt          # Canvas: tile shapes + blob polygons
+│       ├── AcidPattern.kt           # 10 animated pattern generators
+│       ├── BlobModulation.kt        # Blob tuning parameters data class
+│       ├── theme/                   # Material 3 theme definitions
 │       └── components/
-│           ├── ControlPanels.kt     # Modes, Scales, Keys, Synth panels
-│           ├── AcidPanel.kt         # Acid effect controls
+│           ├── ControlPanels.kt     # Modes, Scales, Keys, Synth + MIDI controls
+│           ├── BlobPanel.kt         # Cubist blob parameter controls
 │           └── PresetPanel.kt       # Preset management UI
-└── app/src/main/assets/patch/
-    └── *.pd                          # Pure Data synthesis patches
+├── app/src/main/assets/
+│   ├── patch/                       # Pure Data synthesis patches (17 .pd files)
+│   └── presets/                     # 6 bundled JSON presets
+└── app/src/main/res/xml/
+    ├── midi_device_info.xml         # Virtual MIDI device port declaration
+    ├── file_paths.xml               # FileProvider paths for preset sharing
+    ├── backup_rules.xml             # Backup rules
+    └── data_extraction_rules.xml    # Data extraction rules
 ```
 
 ### Tech Stack
 - **Kotlin** + **Jetpack Compose** — Modern Android UI
 - **CameraX** — Efficient real-time camera analysis
 - **pd-for-android** — Pure Data audio synthesis
+- **android.media.midi** — Built-in Android MIDI API (USB MIDI)
+- **Bluetooth LE GATT** — BLE MIDI peripheral (advertising + GATT server)
 - **StateFlow** — Reactive state management
 - **Material 3** — Design system components
+- **Accompanist Permissions** — Runtime permission handling
 
 ---
 
@@ -200,6 +244,7 @@ This project is open source. See [LICENSE](LICENSE) for details.
 - **pd-for-android** by Peter Brinkmann & contributors
 - **Antoni Gaudí** for the trencadís inspiration
 - The **Jetpack Compose** team at Google
+- The **BLE MIDI** spec by Apple, for wireless MIDI over Bluetooth LE
 
 ---
 

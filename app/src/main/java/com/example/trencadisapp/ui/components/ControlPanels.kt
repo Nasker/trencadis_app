@@ -21,6 +21,8 @@ import androidx.compose.ui.unit.sp
 import com.example.trencadisapp.SynthState
 import com.example.trencadisapp.audio.MusicConstants
 import com.example.trencadisapp.camera.PixelSelectionMode
+import com.example.trencadisapp.midi.MidiOutputMode
+import com.example.trencadisapp.midi.MidiState
 import com.example.trencadisapp.ui.AcidModulation
 import com.example.trencadisapp.ui.AcidPattern
 
@@ -405,6 +407,11 @@ private fun FigureButton(
 fun SynthPanel(
     synthState: SynthState,
     onSynthStateChange: ((SynthState) -> SynthState) -> Unit,
+    midiState: MidiState = MidiState(),
+    onMidiEnabled: (Boolean) -> Unit = {},
+    onMidiOutputMode: (MidiOutputMode) -> Unit = {},
+    onMidiChannel: (Int) -> Unit = {},
+    onMidiBleEnabled: (Boolean) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     Column(
@@ -495,6 +502,107 @@ fun SynthPanel(
         SynthSlider("Feedback", synthState.feedback, 0f, 0.49f) { newValue ->
             onSynthStateChange { s -> s.copy(feedback = newValue) }
         }
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        // MIDI section
+        Text("MIDI", color = Color.White, fontSize = 10.sp)
+        Spacer(modifier = Modifier.height(4.dp))
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text("Enable", color = Color.White, fontSize = 10.sp, modifier = Modifier.weight(1f))
+            Switch(
+                checked = midiState.enabled,
+                onCheckedChange = onMidiEnabled,
+                modifier = Modifier.height(24.dp),
+                colors = SwitchDefaults.colors(
+                    checkedThumbColor = Color(0xFF00E5A0),
+                    checkedTrackColor = Color(0xFF00E5A0).copy(alpha = 0.4f)
+                )
+            )
+        }
+        if (midiState.enabled) {
+            Spacer(modifier = Modifier.height(4.dp))
+            Text("Output", color = Color.White, fontSize = 10.sp)
+            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                MidiModeButton("Pd", midiState.outputMode == MidiOutputMode.INTERNAL) {
+                    onMidiOutputMode(MidiOutputMode.INTERNAL)
+                }
+                MidiModeButton("MIDI", midiState.outputMode == MidiOutputMode.MIDI_OUT) {
+                    onMidiOutputMode(MidiOutputMode.MIDI_OUT)
+                }
+                MidiModeButton("Both", midiState.outputMode == MidiOutputMode.BOTH) {
+                    onMidiOutputMode(MidiOutputMode.BOTH)
+                }
+            }
+            Spacer(modifier = Modifier.height(4.dp))
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text("Ch", color = Color.White, fontSize = 10.sp, modifier = Modifier.weight(1f))
+                val channels = (1..16).map { it.toString() }
+                val scrollState = rememberScrollState()
+                Row(
+                    modifier = Modifier.horizontalScroll(scrollState),
+                    horizontalArrangement = Arrangement.spacedBy(2.dp)
+                ) {
+                    channels.forEachIndexed { idx, label ->
+                        val ch = idx + 1
+                        MidiModeButton(label, midiState.channel == ch, compact = true) {
+                            onMidiChannel(ch)
+                        }
+                    }
+                }
+            }
+            Spacer(modifier = Modifier.height(4.dp))
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                val bleLabel = when {
+                    midiState.bleConnected -> "BLE ●"
+                    midiState.bleEnabled   -> "BLE ◌"
+                    else                   -> "BLE"
+                }
+                val bleLabelColor = when {
+                    midiState.bleConnected -> Color(0xFF00E5A0)
+                    else                   -> Color.White
+                }
+                Text(bleLabel, color = bleLabelColor, fontSize = 10.sp, modifier = Modifier.weight(1f))
+                Switch(
+                    checked = midiState.bleEnabled,
+                    onCheckedChange = onMidiBleEnabled,
+                    modifier = Modifier.height(24.dp),
+                    colors = SwitchDefaults.colors(
+                        checkedThumbColor = Color(0xFF00E5A0),
+                        checkedTrackColor = Color(0xFF00E5A0).copy(alpha = 0.4f)
+                    )
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun MidiModeButton(
+    label: String,
+    selected: Boolean,
+    compact: Boolean = false,
+    onClick: () -> Unit
+) {
+    val bg = if (selected) Color(0xFF00E5A0) else Color.White.copy(alpha = 0.15f)
+    val textColor = if (selected) Color.Black else Color.White
+    Box(
+        modifier = Modifier
+            .background(bg, RoundedCornerShape(4.dp))
+            .clickable { onClick() }
+            .padding(horizontal = if (compact) 6.dp else 8.dp, vertical = 4.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(label, color = textColor, fontSize = if (compact) 9.sp else 10.sp)
     }
 }
 

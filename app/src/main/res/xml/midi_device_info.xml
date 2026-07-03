@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<midi-device-info>
+    <input-port name="Input"/>
+    <output-port name="Output"/>
+</midi-device-info>
