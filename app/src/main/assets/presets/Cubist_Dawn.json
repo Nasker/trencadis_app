@@ -1,0 +1,52 @@
+{
+  "name": "Cubist Dawn",
+  "version": 1,
+  "synth": {
+    "subOsc": true,
+    "sinOsc": true,
+    "sawOsc": false,
+    "sqrOsc": false,
+    "noiseOsc": false,
+    "cutoff": 0.6,
+    "resonance": 0.15,
+    "envelope": 0.1,
+    "attack": 0.3,
+    "release": 0.5,
+    "distortion": 0.0,
+    "fm": 0.05,
+    "fmAmount": 0.1,
+    "chorusFreq": 0.15,
+    "chorusMod": 0.2,
+    "delayFigure": 2.0,
+    "feedback": 0.3
+  },
+  "music": {
+    "scaleIndex": 0,
+    "keyIndex": 0,
+    "octaveIndex": 2,
+    "figureIndex": 2,
+    "tempo": 90.0
+  },
+  "acid": {
+    "enabled": true,
+    "hueAmount": 0.4,
+    "sizeAmount": 0.25,
+    "rotationAmount": 0.3,
+    "alphaAmount": 0.25,
+    "animationSpeed": 0.08,
+    "brightnessSizeBoost": 0.12
+  },
+  "acidPatternIndex": 0,
+  "selectionMode": "SEQUENCE",
+  "useFrontCamera": false,
+  "useBlobMode": true,
+  "blob": {
+    "hueBuckets": 16,
+    "minBlobSize": 50,
+    "maxBlobs": 500,
+    "blobBlend": 0.85,
+    "outlineWidth": 10.0,
+    "outlineAlpha": 0.5,
+    "blobsOnTop": true
+  }
+}

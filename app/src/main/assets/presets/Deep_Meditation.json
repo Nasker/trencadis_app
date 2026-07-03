@@ -1,0 +1,52 @@
+{
+  "name": "Deep Meditation",
+  "version": 1,
+  "synth": {
+    "subOsc": true,
+    "sinOsc": true,
+    "sawOsc": false,
+    "sqrOsc": false,
+    "noiseOsc": false,
+    "cutoff": 0.3,
+    "resonance": 0.05,
+    "envelope": 0.0,
+    "attack": 0.8,
+    "release": 0.9,
+    "distortion": 0.0,
+    "fm": 0.02,
+    "fmAmount": 0.05,
+    "chorusFreq": 0.1,
+    "chorusMod": 0.15,
+    "delayFigure": 4.0,
+    "feedback": 0.45
+  },
+  "music": {
+    "scaleIndex": 2,
+    "keyIndex": 9,
+    "octaveIndex": 1,
+    "figureIndex": 0,
+    "tempo": 50.0
+  },
+  "acid": {
+    "enabled": false,
+    "hueAmount": 0.2,
+    "sizeAmount": 0.1,
+    "rotationAmount": 0.1,
+    "alphaAmount": 0.3,
+    "animationSpeed": 0.02,
+    "brightnessSizeBoost": 0.05
+  },
+  "acidPatternIndex": 4,
+  "selectionMode": "CENTER",
+  "useFrontCamera": false,
+  "useBlobMode": true,
+  "blob": {
+    "hueBuckets": 12,
+    "minBlobSize": 80,
+    "maxBlobs": 300,
+    "blobBlend": 0.7,
+    "outlineWidth": 10.0,
+    "outlineAlpha": 0.4,
+    "blobsOnTop": true
+  }
+}

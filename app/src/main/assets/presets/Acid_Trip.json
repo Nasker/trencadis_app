@@ -29,14 +29,24 @@
   },
   "acid": {
     "enabled": true,
-    "multiShape": true,
     "hueAmount": 0.7,
     "sizeAmount": 0.5,
     "rotationAmount": 0.6,
     "alphaAmount": 0.3,
-    "animationSpeed": 0.15
+    "animationSpeed": 0.15,
+    "brightnessSizeBoost": 0.08
   },
   "acidPatternIndex": 5,
   "selectionMode": "SEQUENCE",
-  "useFrontCamera": false
+  "useFrontCamera": false,
+  "useBlobMode": true,
+  "blob": {
+    "hueBuckets": 16,
+    "minBlobSize": 50,
+    "maxBlobs": 500,
+    "blobBlend": 0.9,
+    "outlineWidth": 10.0,
+    "outlineAlpha": 0.5,
+    "blobsOnTop": true
+  }
 }

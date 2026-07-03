@@ -1,0 +1,52 @@
+{
+  "name": "Noise Garden",
+  "version": 1,
+  "synth": {
+    "subOsc": false,
+    "sinOsc": false,
+    "sawOsc": true,
+    "sqrOsc": true,
+    "noiseOsc": true,
+    "cutoff": 0.25,
+    "resonance": 0.7,
+    "envelope": 0.4,
+    "attack": 0.0,
+    "release": 0.15,
+    "distortion": 0.35,
+    "fm": 0.3,
+    "fmAmount": 0.5,
+    "chorusFreq": 0.0,
+    "chorusMod": 0.0,
+    "delayFigure": 0.0,
+    "feedback": 0.2
+  },
+  "music": {
+    "scaleIndex": 9,
+    "keyIndex": 3,
+    "octaveIndex": 1,
+    "figureIndex": 5,
+    "tempo": 140.0
+  },
+  "acid": {
+    "enabled": true,
+    "hueAmount": 0.8,
+    "sizeAmount": 0.6,
+    "rotationAmount": 0.7,
+    "alphaAmount": 0.35,
+    "animationSpeed": 0.25,
+    "brightnessSizeBoost": 0.15
+  },
+  "acidPatternIndex": 5,
+  "selectionMode": "BRIGHTEST",
+  "useFrontCamera": false,
+  "useBlobMode": false,
+  "blob": {
+    "hueBuckets": 16,
+    "minBlobSize": 50,
+    "maxBlobs": 500,
+    "blobBlend": 1.0,
+    "outlineWidth": 10.0,
+    "outlineAlpha": 0.5,
+    "blobsOnTop": true
+  }
+}
