@@ -19,6 +19,10 @@ import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -110,6 +114,59 @@ fun PalettePanel(
                 valueColor = Color(0xFFFF9800),
                 onValueChange = { onBlobModulationChanged(blobModulation.copy(blobBlend = it)) }
             )
+
+            // ── Advanced blob controls (collapsible) ──
+            var showAdvanced by remember { mutableStateOf(false) }
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { showAdvanced = !showAdvanced }
+                    .padding(vertical = 2.dp)
+            ) {
+                Text(
+                    text = if (showAdvanced) "▼ ADVANCED" else "▶ ADVANCED",
+                    color = Color.White.copy(alpha = 0.5f),
+                    fontSize = 9.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+            if (showAdvanced) {
+                PaletteSlider(
+                    label = "HUE BKT",
+                    value = blobModulation.hueBuckets.toFloat(),
+                    min = 2f, max = 32f,
+                    valueColor = Color(0xFFFF9800),
+                    onValueChange = { onBlobModulationChanged(blobModulation.copy(hueBuckets = it.toInt())) }
+                )
+                PaletteSlider(
+                    label = "MIN SIZE",
+                    value = blobModulation.minBlobSize.toFloat(),
+                    min = 5f, max = 200f,
+                    valueColor = Color(0xFFFF9800),
+                    onValueChange = { onBlobModulationChanged(blobModulation.copy(minBlobSize = it.toInt())) }
+                )
+                PaletteSlider(
+                    label = "MAX BLOB",
+                    value = blobModulation.maxBlobs.toFloat(),
+                    min = 50f, max = 1000f,
+                    valueColor = Color(0xFFFF9800),
+                    onValueChange = { onBlobModulationChanged(blobModulation.copy(maxBlobs = it.toInt())) }
+                )
+                PaletteSlider(
+                    label = "OUTLINE",
+                    value = blobModulation.outlineWidth,
+                    min = 0f, max = 30f,
+                    valueColor = Color(0xFFFF9800),
+                    onValueChange = { onBlobModulationChanged(blobModulation.copy(outlineWidth = it)) }
+                )
+                PaletteSlider(
+                    label = "OUT α",
+                    value = blobModulation.outlineAlpha,
+                    valueColor = Color(0xFFFF9800),
+                    onValueChange = { onBlobModulationChanged(blobModulation.copy(outlineAlpha = it)) }
+                )
+            }
         }
 
         // BRI-SIZE slider (brightnessSizeBoost from acid, always visible)
