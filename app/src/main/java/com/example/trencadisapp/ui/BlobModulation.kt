@@ -15,6 +15,11 @@ data class BlobModulation(
     // Lower = more tiny fragments, higher = only larger regions.
     val minBlobSize: Int = 50,
 
+    // Maximum number of pixels a single blob may grow to. Oversized uniform regions
+    // are split into several blobs of at most this size, so no single polygon
+    // dominates the screen.
+    val maxBlobSize: Int = 800,
+
     // Maximum number of blobs to draw per frame (performance cap).
     val maxBlobs: Int = 500,
 

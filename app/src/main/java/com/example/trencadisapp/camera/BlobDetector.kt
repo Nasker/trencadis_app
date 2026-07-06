@@ -39,6 +39,7 @@ object BlobDetector {
     ): List<PixelBlob> {
         val hueBuckets = modulation.hueBuckets.coerceIn(1, 32)
         val minBlobSize = modulation.minBlobSize.coerceAtLeast(1)
+        val maxBlobSize = modulation.maxBlobSize.coerceAtLeast(minBlobSize)
         val maxBlobs = modulation.maxBlobs.coerceAtLeast(1)
         val cols = grid.cols
         val rows = grid.rows
@@ -90,7 +91,11 @@ object BlobDetector {
                 sumBri += px.brightness; sumHue += px.hue; sumSat += px.saturation
                 sumX += px.gridX; sumY += px.gridY
 
-                // Expand 4 neighbours without creating any objects
+                // Expand 4 neighbours without creating any objects.
+                // Stop growing once the component (drained + still stacked cells)
+                // reaches maxBlobSize — leftover cells stay unvisited and form
+                // their own blobs on later iterations, splitting oversized regions.
+                if (compSize + stackTop >= maxBlobSize) continue
                 val x = px.gridX; val y = px.gridY
 
                 if (x > 0) {

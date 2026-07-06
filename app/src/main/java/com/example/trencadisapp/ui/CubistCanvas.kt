@@ -1,8 +1,10 @@
 package com.example.trencadisapp.ui
 
 import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.ui.input.pointer.positionChanged
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
@@ -32,6 +34,7 @@ fun CubistCanvas(
     cutoffValue: Float,
     acidModulation: AcidModulation = AcidModulation(),
     acidPatternIndex: Int = 9,
+    envelopeTrail: List<Float> = emptyList(),
     modifier: Modifier = Modifier,
     onTouch: (Float, Float, Boolean, Float, Float) -> Unit = { _, _, _, _, _ -> },
     onDoubleTap: (Float, Float, Float, Float) -> Unit = { _, _, _, _ -> },
@@ -68,35 +71,39 @@ fun CubistCanvas(
         modifier = modifier
             .pointerInput(Unit) {
                 detectTapGestures(
-                    onDoubleTap = { offset -> 
-                        onDoubleTap(offset.x, offset.y, size.width.toFloat(), size.height.toFloat()) 
-                    },
-                    onPress = { offset ->
-                        onTouch(offset.x, offset.y, true, size.width.toFloat(), size.height.toFloat())
-                        tryAwaitRelease()
-                        onTouch(offset.x, offset.y, false, size.width.toFloat(), size.height.toFloat())
+                    onDoubleTap = { offset ->
+                        onDoubleTap(offset.x, offset.y, size.width.toFloat(), size.height.toFloat())
                     }
                 )
             }
             .pointerInput(Unit) {
-                detectDragGestures(
-                    onDragStart = { offset ->
-                        onTouch(offset.x, offset.y, true, size.width.toFloat(), size.height.toFloat())
-                    },
-                    onDrag = { change, _ ->
-                        val x = change.position.x
-                        val y = change.position.y
-                        onTouch(x, y, true, size.width.toFloat(), size.height.toFloat())
-                        // Also notify edge drag for panel detection
-                        onEdgeDrag(x, y, size.width.toFloat(), size.height.toFloat())
-                    },
-                    onDragEnd = {
-                        onTouch(0f, 0f, false, size.width.toFloat(), size.height.toFloat())
-                    },
-                    onDragCancel = {
-                        onTouch(0f, 0f, false, size.width.toFloat(), size.height.toFloat())
+                // Single owner of press/move/release. The previous split
+                // tap+drag detectors fought each other: when a drag took over,
+                // the press gesture was cancelled and emitted a spurious
+                // isTouching=false right after touch-down, closing the
+                // pointer-mode NoteOn gate before the first note could sound.
+                awaitEachGesture {
+                    val down = awaitFirstDown()
+                    val w = size.width.toFloat()
+                    val h = size.height.toFloat()
+                    onTouch(down.position.x, down.position.y, true, w, h)
+                    while (true) {
+                        val event = awaitPointerEvent()
+                        val change = event.changes.firstOrNull { it.id == down.id }
+                            ?: event.changes.first()
+                        if (!change.pressed) {
+                            onTouch(change.position.x, change.position.y, false, w, h)
+                            break
+                        }
+                        if (change.positionChanged()) {
+                            val x = change.position.x
+                            val y = change.position.y
+                            onTouch(x, y, true, w, h)
+                            // Also notify edge drag for panel detection
+                            onEdgeDrag(x, y, w, h)
+                        }
                     }
-                )
+                }
             }
     ) {
         val canvasWidth = size.width
@@ -130,7 +137,26 @@ fun CubistCanvas(
             // remain round even with sub-pixel cell rounding.
             val blockWidth = canvasWidth / grid.cols
             val blockHeight = canvasHeight / grid.rows
-            
+
+            // ── Envelope ripple ──
+            // Each cell samples the amp envelope delayed by its distance from the
+            // sounding pixel (trail is newest-first at ~33ms/sample), so the note's
+            // envelope visibly travels outward through the neighbours. Subtle by
+            // design: up to ~+22% size at the origin, attenuating with distance.
+            val rippleOrigin = selectedPixel
+            val rippleActive = envelopeTrail.any { it > 0.001f }
+            fun rippleScaleAt(gridX: Float, gridY: Float): Float {
+                if (!rippleActive || rippleOrigin == null) return 1f
+                val dx = gridX - rippleOrigin.gridX
+                val dy = gridY - rippleOrigin.gridY
+                val dist = kotlin.math.sqrt(dx * dx + dy * dy)
+                // Wave travels ~1.5 cells per envelope sample
+                val idx = (dist / 1.5f).toInt()
+                if (idx >= envelopeTrail.size) return 1f
+                val attenuation = 1f / (1f + dist * 0.12f)
+                return 1f + 0.22f * envelopeTrail[idx] * attenuation
+            }
+
             // Sort pixels by effective brightness: dark/smaller shapes drawn first (back),
             // bright/larger shapes drawn last (front). This preserves the fake 3D depth
             // effect even when brightnessSizeBoost makes bright shapes much larger.
@@ -152,7 +178,8 @@ fun CubistCanvas(
                         hexSin = hexSin,
                         starCos = starCos,
                         starSin = starSin,
-                        globalAlpha = globalAlpha
+                        globalAlpha = globalAlpha,
+                        rippleScale = rippleScaleAt(pixel.gridX.toFloat(), pixel.gridY.toFloat())
                     )
                 }
             }
@@ -169,14 +196,16 @@ fun CubistCanvas(
                     if (tileAlpha > 0.01f) drawTilesAt(tileAlpha)
                     if (blobAlpha > 0.01f) {
                         for (blob in sortedBlobs) {
-                            drawBlobPolygon(blob, blockWidth, blockHeight, blobModulation, acidPattern, acidModulation)
+                            drawBlobPolygon(blob, blockWidth, blockHeight, blobModulation, acidPattern, acidModulation,
+                                rippleScale = rippleScaleAt(blob.center.x, blob.center.y))
                         }
                     }
                 } else {
                     // Blobs first, then tiles on top at crossfade opacity.
                     if (blobAlpha > 0.01f) {
                         for (blob in sortedBlobs) {
-                            drawBlobPolygon(blob, blockWidth, blockHeight, blobModulation, acidPattern, acidModulation)
+                            drawBlobPolygon(blob, blockWidth, blockHeight, blobModulation, acidPattern, acidModulation,
+                                rippleScale = rippleScaleAt(blob.center.x, blob.center.y))
                         }
                     }
                     if (tileAlpha > 0.01f) drawTilesAt(tileAlpha)
@@ -212,7 +241,8 @@ private fun DrawScope.drawCubistShapeOptimized(
     hexSin: FloatArray,
     starCos: FloatArray,
     starSin: FloatArray,
-    globalAlpha: Float = 1f
+    globalAlpha: Float = 1f,
+    rippleScale: Float = 1f
 ) {
     val x = pixel.gridX * blockWidth + blockWidth / 2
     val y = pixel.gridY * blockHeight + blockHeight / 2
@@ -294,7 +324,7 @@ private fun DrawScope.drawCubistShapeOptimized(
     // Range: 0.5 baseline → up to (0.5 + 10 * boost) at max brightness.
     val sizeBoost = acidModulation.brightnessSizeBoost.coerceAtLeast(0f)
     val baseShapeSize = baseSize * (0.5f + brightMap * sizeBoost)
-    val shapeSize = baseShapeSize * acidSizeMod
+    val shapeSize = baseShapeSize * acidSizeMod * rippleScale
     val halfSize = shapeSize / 2
     
     // Always use rectangles — multiShape removed for performance
@@ -372,7 +402,8 @@ private fun DrawScope.drawBlobPolygon(
     blockHeight: Float,
     blobModulation: BlobModulation?,
     acidPattern: AcidPattern,
-    acidModulation: AcidModulation
+    acidModulation: AcidModulation,
+    rippleScale: Float = 1f
 ) {
     if (blob.hull.size < 3) return
 
@@ -381,7 +412,9 @@ private fun DrawScope.drawBlobPolygon(
 
     // Contract each hull vertex toward the blob centroid.
     // This leaves a grout gap (~12% of cell size) so adjacent blobs never overlap.
-    val shrink = 0.88f
+    // The envelope ripple breathes into that gap (at half depth, capped just past
+    // 1.0 so neighbouring blobs barely kiss at full swell).
+    val shrink = (0.88f * (1f + (rippleScale - 1f) * 0.5f)).coerceAtMost(1.01f)
     val cx = blob.center.x
     val cy = blob.center.y
 
