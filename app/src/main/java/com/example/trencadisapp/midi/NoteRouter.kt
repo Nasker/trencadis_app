@@ -17,7 +17,10 @@ class NoteRouter {
     }
 
     fun noteOn(pitch: Int, velocity: Int, channel: Int = 1) {
-        if (lastPitch >= 0 && lastPitch != pitch) noteOff(lastPitch, lastChannel)
+        // Always release the previous note first — including same-pitch repeats.
+        // Re-sending note-on without a note-off stacks voices on the receiver,
+        // and the eventual single note-off leaves one instance hanging forever.
+        if (lastPitch >= 0) noteOff(lastPitch, lastChannel)
         lastPitch = pitch
         lastChannel = channel
         destinations.filter { it.isAvailable() }.forEach { it.noteOn(pitch, velocity, channel) }
@@ -25,10 +28,13 @@ class NoteRouter {
 
     fun noteOff(pitch: Int, channel: Int = 1) {
         destinations.filter { it.isAvailable() }.forEach { it.noteOff(pitch, channel) }
+        if (pitch == lastPitch) lastPitch = -1
     }
 
     fun allNotesOff(channel: Int = 1) {
-        if (lastPitch >= 0) noteOff(lastPitch, channel)
+        // Release on the channel the note was actually sent on — the caller's
+        // channel may already reflect a new selection.
+        if (lastPitch >= 0) noteOff(lastPitch, lastChannel)
         lastPitch = -1
     }
 }

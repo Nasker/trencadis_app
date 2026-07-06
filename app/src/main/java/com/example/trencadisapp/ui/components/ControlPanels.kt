@@ -30,8 +30,14 @@ import com.example.trencadisapp.ui.AcidPattern
 fun ModesPanel(
     currentMode: PixelSelectionMode,
     useFrontCamera: Boolean,
+    blockSize: Int,
+    isCustomGridResolution: Boolean,
+    minGridResolution: Int,
+    maxGridResolution: Int,
     onModeSelected: (PixelSelectionMode) -> Unit,
     onToggleCamera: () -> Unit,
+    onGridResolutionChanged: (Int) -> Unit,
+    onGridResolutionReset: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     Column(
@@ -93,6 +99,62 @@ fun ModesPanel(
                 fontSize = 10.sp,
                 fontWeight = FontWeight.Bold
             )
+        }
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        // ── Advanced grid controls (collapsible) ──
+        var showAdvanced by remember { mutableStateOf(false) }
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier
+                .clickable { showAdvanced = !showAdvanced }
+                .padding(vertical = 2.dp)
+        ) {
+            Text(
+                text = if (showAdvanced) "▼ ADVANCED" else "▶ ADVANCED",
+                color = Color.White.copy(alpha = 0.5f),
+                fontSize = 9.sp,
+                fontWeight = FontWeight.Bold
+            )
+        }
+        if (showAdvanced) {
+            Text(
+                text = "GRID: $blockSize",
+                color = Color.White,
+                fontSize = 10.sp,
+                fontWeight = FontWeight.Bold
+            )
+            // Changing the resolution rebinds the camera, so the value is only
+            // committed when the drag ends — not on every slider tick.
+            var pendingResolution by remember(blockSize) { mutableStateOf(blockSize.toFloat()) }
+            Slider(
+                value = pendingResolution,
+                onValueChange = { pendingResolution = it },
+                onValueChangeFinished = { onGridResolutionChanged(pendingResolution.toInt()) },
+                valueRange = minGridResolution.toFloat()..maxGridResolution.toFloat(),
+                colors = SliderDefaults.colors(
+                    thumbColor = Color(0xFF4CAF50),
+                    activeTrackColor = Color(0xFF4CAF50),
+                    inactiveTrackColor = Color(0xFF424242)
+                ),
+                modifier = Modifier.width(120.dp)
+            )
+            Box(
+                modifier = Modifier
+                    .size(60.dp, 30.dp)
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(if (isCustomGridResolution) Color(0xFF424242) else Color(0xFF4CAF50))
+                    .clickable(onClick = onGridResolutionReset),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = "AUTO",
+                    color = Color.White,
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            }
         }
     }
 }

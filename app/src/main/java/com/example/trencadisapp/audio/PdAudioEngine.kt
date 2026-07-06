@@ -20,9 +20,14 @@ class PdAudioEngine(private val context: Context) {
     private var patchHandle: Int = -1
     private var isInitialized = false
     private var onBangReceived: (() -> Unit)? = null
-    
+    private var onEnvelopeReceived: ((Float) -> Unit)? = null
+
     fun setOnBangReceived(callback: () -> Unit) {
         onBangReceived = callback
+    }
+
+    fun setOnEnvelopeReceived(callback: (Float) -> Unit) {
+        onEnvelopeReceived = callback
     }
     
     fun initialize(): Boolean {
@@ -42,7 +47,11 @@ class PdAudioEngine(private val context: Context) {
                         onBangReceived?.invoke()
                     }
                 }
-                override fun receiveFloat(source: String, x: Float) {}
+                override fun receiveFloat(source: String, x: Float) {
+                    if (source == "ENVF") {
+                        onEnvelopeReceived?.invoke(x)
+                    }
+                }
                 override fun receiveSymbol(source: String, symbol: String) {}
                 override fun receiveList(source: String, args: Array<out Any>?) {}
                 override fun receiveMessage(source: String, symbol: String, args: Array<out Any>?) {}
@@ -51,8 +60,9 @@ class PdAudioEngine(private val context: Context) {
                 }
             })
             
-            // Subscribe to BANG messages
+            // Subscribe to BANG messages and the envelope-follower stream
             PdBase.subscribe("BANG")
+            PdBase.subscribe("ENVF")
             
             // Copy and open the patch
             val patchDir = copyPatchesToFilesDir()
@@ -115,18 +125,18 @@ class PdAudioEngine(private val context: Context) {
             "x_bandpass.pd"
         )
         
+        // Always overwrite: bundled patches evolve with the app, and a stale
+        // copy in filesDir would silently shadow the updated asset.
         for (fileName in patchFiles) {
             val destFile = File(patchDir, fileName)
-            if (!destFile.exists()) {
-                try {
-                    context.assets.open("patch/$fileName").use { input ->
-                        destFile.outputStream().use { output ->
-                            input.copyTo(output)
-                        }
+            try {
+                context.assets.open("patch/$fileName").use { input ->
+                    destFile.outputStream().use { output ->
+                        input.copyTo(output)
                     }
-                } catch (e: IOException) {
-                    Log.w(TAG, "Could not copy patch file: $fileName", e)
                 }
+            } catch (e: IOException) {
+                Log.w(TAG, "Could not copy patch file: $fileName", e)
             }
         }
         

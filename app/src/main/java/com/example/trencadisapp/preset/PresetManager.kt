@@ -82,6 +82,7 @@ data class Preset(
             put("blob", JSONObject().apply {
                 put("hueBuckets", blobModulation.hueBuckets)
                 put("minBlobSize", blobModulation.minBlobSize)
+                put("maxBlobSize", blobModulation.maxBlobSize)
                 put("maxBlobs", blobModulation.maxBlobs)
                 put("blobBlend", blobModulation.blobBlend.round2())
                 put("outlineWidth", blobModulation.outlineWidth.round2())
@@ -147,6 +148,7 @@ data class Preset(
                 blobModulation = if (blob != null) BlobModulation(
                     hueBuckets = blob.optInt("hueBuckets", 16),
                     minBlobSize = blob.optInt("minBlobSize", 50),
+                    maxBlobSize = blob.optInt("maxBlobSize", 800),
                     maxBlobs = blob.optInt("maxBlobs", 500),
                     blobBlend = blob.optDouble("blobBlend", 
                         blob.optDouble("blobAlpha", 1.0)

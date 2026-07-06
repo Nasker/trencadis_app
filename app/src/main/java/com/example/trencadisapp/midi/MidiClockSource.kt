@@ -13,6 +13,7 @@ import android.util.Log
 import com.example.trencadisapp.sync.ClockSource
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -46,10 +47,19 @@ class MidiClockSource(
     private val _scaleFlow = MutableSharedFlow<Int>(extraBufferCapacity = 8)
     override val scaleFlow: Flow<Int> = _scaleFlow.asSharedFlow()
 
+    // Realtime callbacks, invoked synchronously on the MIDI delivery thread so
+    // tick timing is not smeared by dispatcher hops. Keep the handlers cheap.
+    @Volatile var onTick: (() -> Unit)? = null
+    @Volatile var onStart: (() -> Unit)? = null
+    @Volatile var onStop: (() -> Unit)? = null
+
+    @Volatile private var lastTickNanos = 0L
+
     private val tickTimestamps = ArrayDeque<Long>(25)
     private var beatCount = 0
     private var ticksThisBeat = 0
     private var collectJob: Job? = null
+    private var watchdogJob: Job? = null
 
     // Tracks open devices: deviceId → (MidiDevice, MidiOutputPort, MidiInputPort?)
     private val openDevices = ConcurrentHashMap<Int, Triple<MidiDevice, MidiOutputPort, MidiInputPort?>>()
@@ -84,11 +94,26 @@ class MidiClockSource(
         midiManager?.registerDeviceCallback(deviceCallback, Handler(Looper.getMainLooper()))
         // Scan devices already connected
         midiManager?.devices?.forEach { openUsbDevice(it) }
+        // If the DAW stops sending clock without a Stop message, drop the lock
+        // so the internal metro can take over again.
+        watchdogJob = scope.launch {
+            while (true) {
+                delay(500)
+                if (_isConnected.value && lastTickNanos != 0L &&
+                    System.nanoTime() - lastTickNanos > 1_500_000_000L
+                ) {
+                    _isConnected.value = false
+                    onStop?.invoke()
+                }
+            }
+        }
     }
 
     override fun disconnect() {
         collectJob?.cancel()
         collectJob = null
+        watchdogJob?.cancel()
+        watchdogJob = null
         midiManager?.unregisterDeviceCallback(deviceCallback)
         openDevices.values.forEach { (device, outPort, inPort) ->
             outPort.close(); inPort?.close(); device.close()
@@ -129,21 +154,31 @@ class MidiClockSource(
     }
 
     private fun handleMidiMessage(data: ByteArray, timestamp: Long) {
-        when (data[0].toInt() and 0xFF) {
-            0xF8 -> onClockTick(timestamp)
-            0xFA -> {
-                _isConnected.value = true
-                beatCount = 0
-                ticksThisBeat = 0
-                tickTimestamps.clear()
+        // Realtime messages are single status bytes (>= 0xF8) and may arrive
+        // interleaved with channel messages in the same packet, so scan every
+        // byte. Data bytes are <= 0x7F and can never false-match.
+        for (b in data) {
+            when (b.toInt() and 0xFF) {
+                0xF8 -> onClockTick(timestamp)
+                0xFA -> {
+                    _isConnected.value = true
+                    beatCount = 0
+                    ticksThisBeat = 0
+                    tickTimestamps.clear()
+                    onStart?.invoke()
+                }
+                0xFB -> _isConnected.value = true
+                0xFC -> {
+                    _isConnected.value = false
+                    onStop?.invoke()
+                }
             }
-            0xFB -> _isConnected.value = true
-            0xFC -> _isConnected.value = false
         }
     }
 
     private fun onClockTick(timestampNanos: Long) {
         _isConnected.value = true
+        lastTickNanos = System.nanoTime()
         tickTimestamps.addLast(timestampNanos)
         if (tickTimestamps.size > 25) tickTimestamps.removeFirst()
 
@@ -160,5 +195,7 @@ class MidiClockSource(
             ticksThisBeat = 0
             _beatFlow.tryEmit(beatCount++)
         }
+
+        onTick?.invoke()
     }
 }

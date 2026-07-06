@@ -147,6 +147,13 @@ fun PalettePanel(
                     onValueChange = { onBlobModulationChanged(blobModulation.copy(minBlobSize = it.toInt())) }
                 )
                 PaletteSlider(
+                    label = "MAX SIZE",
+                    value = blobModulation.maxBlobSize.toFloat(),
+                    min = 200f, max = 2000f,
+                    valueColor = Color(0xFFFF9800),
+                    onValueChange = { onBlobModulationChanged(blobModulation.copy(maxBlobSize = it.toInt())) }
+                )
+                PaletteSlider(
                     label = "MAX BLOB",
                     value = blobModulation.maxBlobs.toFloat(),
                     min = 50f, max = 1000f,

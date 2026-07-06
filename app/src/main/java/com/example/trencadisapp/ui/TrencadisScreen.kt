@@ -140,6 +140,7 @@ fun TrencadisScreen(
                 cutoffValue = state.synthState.cutoff,
                 acidModulation = state.acidModulation,
                 acidPatternIndex = state.acidPatternIndex,
+                envelopeTrail = state.envelopeTrail,
                 modifier = Modifier.fillMaxSize(),
                 onTouch = { x, y, isTouching, canvasWidth, canvasHeight ->
                     viewModel.setTouch(x, y, isTouching, canvasWidth, canvasHeight)
@@ -207,8 +208,14 @@ fun TrencadisScreen(
                 ModesPanel(
                     currentMode = state.selectionMode,
                     useFrontCamera = state.useFrontCamera,
+                    blockSize = state.blockSize,
+                    isCustomGridResolution = state.customGridResolution != null,
+                    minGridResolution = TrencadisViewModel.MIN_GRID_RESOLUTION,
+                    maxGridResolution = TrencadisViewModel.MAX_GRID_RESOLUTION,
                     onModeSelected = { viewModel.setSelectionMode(it) },
-                    onToggleCamera = { viewModel.toggleCamera() }
+                    onToggleCamera = { viewModel.toggleCamera() },
+                    onGridResolutionChanged = { viewModel.setGridResolution(it) },
+                    onGridResolutionReset = { viewModel.resetGridResolution() }
                 )
             }
             

@@ -69,6 +69,8 @@ data class TrencadisState(
     val selectionMode: PixelSelectionMode = PixelSelectionMode.SEQUENCE,
     val sequenceIndex: Int = 0,
     val blockSize: Int = 120,
+    // User override for grid resolution; null = follow per-mode defaults
+    val customGridResolution: Int? = null,
     val synthState: SynthState = SynthState(),
     val musicState: MusicState = MusicState(),
     val touchX: Float = 0f,
@@ -90,11 +92,24 @@ data class TrencadisState(
     val screenAspectRatio: Float = 9f / 16f,  // width/height, updated once canvas is measured
     val useBlobMode: Boolean = false,
     val blobModulation: BlobModulation = BlobModulation(),
-    val midiState: MidiState = MidiState()
+    val midiState: MidiState = MidiState(),
+    // Recent amp-envelope samples from Pd (~30Hz, newest first). The canvas
+    // samples this delayed by grid distance to ripple outward from the note.
+    val envelopeTrail: List<Float> = emptyList()
 )
 
 class TrencadisViewModel(application: Application) : AndroidViewModel(application) {
-    
+
+    companion object {
+        // Grid density along the longer screen axis. Below ~20 cells the mosaic loses
+        // meaning; above ~160 per-frame analysis cost grows quadratically.
+        const val MIN_GRID_RESOLUTION = 20
+        const val MAX_GRID_RESOLUTION = 160
+
+        // Envelope samples kept for the visual ripple (~0.8s at 33ms/sample)
+        const val ENVELOPE_TRAIL_SIZE = 24
+    }
+
     private val _state = MutableStateFlow(TrencadisState())
     val state: StateFlow<TrencadisState> = _state.asStateFlow()
     
@@ -114,7 +129,12 @@ class TrencadisViewModel(application: Application) : AndroidViewModel(applicatio
     
     private var lastIp = 0f
     private var lastJp = 0f
-    
+
+    // External MIDI clock phase (24 ticks per quarter note). Written from the
+    // MIDI delivery thread, reset from Start messages and lock transitions.
+    @Volatile private var externalTickCount = 0L
+    @Volatile private var nextStepAtTick = 0.0
+
     init {
         // Read true hardware screen dimensions to get an accurate aspect ratio.
         // Compose's onGloballyPositioned under-reports height (insets not included)
@@ -138,15 +158,32 @@ class TrencadisViewModel(application: Application) : AndroidViewModel(applicatio
                 incrementSequenceIndex()
             }
         }
+        pdEngine.setOnEnvelopeReceived { level ->
+            pushEnvelopeSample(level.coerceIn(0f, 1f))
+        }
         // Copy bundled presets on first launch
         presetManager.copyBundledPresetsIfNeeded()
         refreshPresetList()
 
         // Start collecting MIDI clock (no-op until device connects)
+        midiClockSource.onStart = { resetExternalClockPhase() }
+        midiClockSource.onTick = { onExternalClockTick() }
         midiClockSource.connect()
         viewModelScope.launch {
             midiClockSource.isConnected.collect { connected ->
                 _state.update { it.copy(midiState = it.midiState.copy(isClockLocked = connected)) }
+                // While locked to external clock the Pd metro is silenced and
+                // steps are driven from MIDI ticks; on clock loss the internal
+                // metro takes over again (except in manual pointer mode).
+                if (connected) {
+                    resetExternalClockPhase()
+                    pdEngine.setSequencerOn(false)
+                } else {
+                    // Release the note the last externally-clocked step left
+                    // sounding; the internal metro will retrigger from here.
+                    noteRouter.allNotesOff(_state.value.midiState.channel)
+                    pdEngine.setSequencerOn(_state.value.selectionMode != PixelSelectionMode.POINTER)
+                }
             }
         }
         viewModelScope.launch {
@@ -265,6 +302,49 @@ class TrencadisViewModel(application: Application) : AndroidViewModel(applicatio
         }
     }
     
+    // ~0.8s of envelope history at 33ms per sample
+    private val envelopeTrailBuf = ArrayDeque<Float>(ENVELOPE_TRAIL_SIZE)
+
+    private fun pushEnvelopeSample(level: Float) {
+        synchronized(envelopeTrailBuf) {
+            // Once silent and the whole trail has drained to zero, stop pushing
+            // state updates so an idle app doesn't recompose at 30Hz forever.
+            if (level <= 0.001f &&
+                envelopeTrailBuf.size >= ENVELOPE_TRAIL_SIZE &&
+                envelopeTrailBuf.all { it <= 0.001f }
+            ) return
+
+            envelopeTrailBuf.addFirst(level)
+            while (envelopeTrailBuf.size > ENVELOPE_TRAIL_SIZE) envelopeTrailBuf.removeLast()
+            val snapshot = envelopeTrailBuf.toList()
+            _state.update { it.copy(envelopeTrail = snapshot) }
+        }
+    }
+
+    private fun resetExternalClockPhase() {
+        externalTickCount = 0L
+        nextStepAtTick = 0.0
+    }
+
+    /**
+     * Called synchronously on the MIDI thread for every 0xF8 clock tick (24 ppqn).
+     * Fires a BANG into the Pd patch at each step boundary of the current figure:
+     * quarter = 24 ticks, eighth = 12, ... (ticksPerStep = 96 / 2^figureIndex).
+     * The fractional accumulator keeps 64th notes (1.5 ticks) on average time.
+     * The BANG echoes back through the app's "BANG" subscription, so sequence
+     * stepping and MIDI note-out follow the exact same path as the internal metro.
+     */
+    private fun onExternalClockTick() {
+        val state = _state.value
+        if (state.selectionMode == PixelSelectionMode.POINTER) return
+        if (externalTickCount >= nextStepAtTick) {
+            val ticksPerStep = 96.0 / 2.0.pow(state.musicState.figureIndex)
+            nextStepAtTick += ticksPerStep
+            pdEngine.triggerBang()
+        }
+        externalTickCount++
+    }
+
     private fun freqToMidiPitch(freq: Float): Int =
         (69 + 12 * Math.log(freq / 440.0) / Math.log(2.0)).toInt().coerceIn(0, 127)
 
@@ -288,19 +368,42 @@ class TrencadisViewModel(application: Application) : AndroidViewModel(applicatio
     }
     
     fun setSelectionMode(mode: PixelSelectionMode) {
-        _state.update { it.copy(selectionMode = mode) }
-        
-        val newBlockSize = when (mode) {
-            PixelSelectionMode.SEQUENCE -> 60
-            PixelSelectionMode.BRIGHTEST -> 50
-            PixelSelectionMode.CENTER -> 60
-            PixelSelectionMode.POINTER -> 50
+        // The sequencer stops stepping in pointer mode, so whatever note the
+        // last step left sounding would never get its note-off.
+        if (mode == PixelSelectionMode.POINTER) {
+            noteRouter.allNotesOff(_state.value.midiState.channel)
         }
+        _state.update { it.copy(selectionMode = mode) }
+
+        val newBlockSize = _state.value.customGridResolution ?: defaultBlockSizeFor(mode)
         _state.update { it.copy(blockSize = newBlockSize) }
-        
-        // Update sequencer state
-        val sequencerOn = mode != PixelSelectionMode.POINTER
+
+        // Update sequencer state — the internal metro stays off while an
+        // external MIDI clock is driving the steps.
+        val sequencerOn = mode != PixelSelectionMode.POINTER &&
+            !_state.value.midiState.isClockLocked
         pdEngine.setSequencerOn(sequencerOn)
+    }
+
+    private fun defaultBlockSizeFor(mode: PixelSelectionMode): Int = when (mode) {
+        PixelSelectionMode.SEQUENCE -> 60
+        PixelSelectionMode.BRIGHTEST -> 50
+        PixelSelectionMode.CENTER -> 60
+        PixelSelectionMode.POINTER -> 50
+    }
+
+    fun setGridResolution(resolution: Int) {
+        val coerced = resolution.coerceIn(MIN_GRID_RESOLUTION, MAX_GRID_RESOLUTION)
+        _state.update { it.copy(customGridResolution = coerced, blockSize = coerced) }
+    }
+
+    fun resetGridResolution() {
+        _state.update {
+            it.copy(
+                customGridResolution = null,
+                blockSize = defaultBlockSizeFor(it.selectionMode)
+            )
+        }
     }
     
     fun setTouch(x: Float, y: Float, isTouching: Boolean, canvasWidth: Float = 0f, canvasHeight: Float = 0f) {
@@ -317,7 +420,13 @@ class TrencadisViewModel(application: Application) : AndroidViewModel(applicatio
         
         if (_state.value.selectionMode == PixelSelectionMode.POINTER) {
             pdEngine.setNoteOn(isTouching)
-            
+
+            // Finger lifted: release the sounding MIDI note. Pd has its own
+            // NoteOn gate, but external destinations only ever saw note-ons.
+            if (!isTouching && prevState.isTouching) {
+                noteRouter.allNotesOff(_state.value.midiState.channel)
+            }
+
             // Trigger on press or when position changes while touching
             if (isTouching) {
                 val grid = _state.value.pixelGrid
@@ -484,8 +593,10 @@ class TrencadisViewModel(application: Application) : AndroidViewModel(applicatio
         if (enabled) {
             noteRouter.add(midiNoteDestination)
         } else {
-            noteRouter.remove(midiNoteDestination)
+            // Release before removing — a destination that has already been
+            // removed never receives its note-off and the note hangs.
             noteRouter.allNotesOff(_state.value.midiState.channel)
+            noteRouter.remove(midiNoteDestination)
         }
     }
 
@@ -494,6 +605,7 @@ class TrencadisViewModel(application: Application) : AndroidViewModel(applicatio
         pdNoteDestination.setActive(mode != MidiOutputMode.MIDI_OUT)
         when (mode) {
             MidiOutputMode.INTERNAL -> {
+                noteRouter.allNotesOff(_state.value.midiState.channel)
                 noteRouter.remove(midiNoteDestination)
                 noteRouter.remove(bleNoteDestination)
             }
@@ -517,8 +629,8 @@ class TrencadisViewModel(application: Application) : AndroidViewModel(applicatio
                 noteRouter.add(bleNoteDestination)
             }
         } else {
-            noteRouter.remove(bleNoteDestination)
             noteRouter.allNotesOff(_state.value.midiState.channel)
+            noteRouter.remove(bleNoteDestination)
             blePeripheral.stopAdvertising()
         }
     }
