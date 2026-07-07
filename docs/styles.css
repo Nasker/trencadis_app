@@ -300,45 +300,6 @@ figure.shot figcaption b{color:var(--amber);font-weight:400}
 .duo{display:grid;grid-template-columns:1fr 1fr;gap:1.2rem;align-items:start;margin-top:2.4rem}
 @media (max-width:640px){ .duo{grid-template-columns:1fr} }
 
-/* video placeholder */
-.video-slot{
-  position:relative;
-  aspect-ratio:16/9;
-  background:var(--panel);
-  border:1px dashed rgba(239,234,224,.32);
-  display:flex;
-  flex-direction:column;
-  align-items:center;
-  justify-content:center;
-  gap:1.4rem;
-  margin-top:2.4rem;
-}
-.video-slot .play{
-  width:4.5rem;height:4.5rem;
-  background:var(--amber);
-  transform:rotate(14deg);
-  display:flex;align-items:center;justify-content:center;
-  box-shadow:0 10px 34px rgba(242,169,59,.3);
-}
-.video-slot .play::after{
-  content:"";
-  border-left:1.35rem solid var(--ground);
-  border-top:.85rem solid transparent;
-  border-bottom:.85rem solid transparent;
-  transform:rotate(-14deg);
-  margin-left:.2rem;
-}
-.video-slot p{
-  font-family:var(--mono);
-  font-size:.78rem;
-  letter-spacing:.14em;
-  text-transform:uppercase;
-  color:var(--muted);
-  margin:0;
-  text-align:center;
-  padding:0 1.5rem;
-}
-
 /* get it */
 .get{background:var(--panel);border-top:1px solid var(--mortar)}
 .get .codebox{
