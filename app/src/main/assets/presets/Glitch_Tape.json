@@ -1,0 +1,60 @@
+{
+  "name": "Glitch Tape",
+  "version": 1,
+  "synth": {
+    "subOsc": false,
+    "sinOsc": false,
+    "sawOsc": true,
+    "sqrOsc": true,
+    "noiseOsc": true,
+    "cutoff": 0.55,
+    "resonance": 0.6,
+    "envelope": 0.9,
+    "attack": 0.005,
+    "release": 0.05,
+    "distortion": 0.45,
+    "fm": 0.3,
+    "fmAmount": 0.5,
+    "chorusFreq": 0.5,
+    "chorusMod": 0.4,
+    "delayFigure": 0.75,
+    "feedback": 0.35
+  },
+  "music": {
+    "scaleIndex": 2,
+    "keyIndex": 1,
+    "octaveIndex": 3,
+    "figureIndex": 0,
+    "tempo": 140.0
+  },
+  "acid": {
+    "enabled": true,
+    "hueAmount": 0.7,
+    "sizeAmount": 0.5,
+    "rotationAmount": 0.8,
+    "alphaAmount": 0.4,
+    "animationSpeed": 0.5,
+    "brightnessSizeBoost": 0.18
+  },
+  "acidPatternIndex": 5,
+  "selectionMode": "SEQUENCE",
+  "useFrontCamera": false,
+  "useBlobMode": false,
+  "customGridResolution": 45,
+  "midi": {
+    "enabled": false,
+    "outputMode": "INTERNAL",
+    "channel": 1,
+    "bleEnabled": false
+  },
+  "blob": {
+    "hueBuckets": 24,
+    "minBlobSize": 30,
+    "maxBlobSize": 500,
+    "maxBlobs": 800,
+    "blobBlend": 1.0,
+    "outlineWidth": 5.0,
+    "outlineAlpha": 0.3,
+    "blobsOnTop": true
+  }
+}

@@ -247,7 +247,7 @@
 #X obj 201 232 r Release;
 #X obj 303 374 r Rsend;
 #X obj 343 309 metro;
-#X obj 343 265 r onSEQ;
+#X obj 343 265 r metroSEQ;
 #X obj 343 339 s BANG;
 #X obj 370 289 r periodSEQ;
 #X obj 241 297 r FM;

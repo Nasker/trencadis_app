@@ -7,6 +7,7 @@ import androidx.core.content.FileProvider
 import com.example.trencadisapp.SynthState
 import com.example.trencadisapp.MusicState
 import com.example.trencadisapp.camera.PixelSelectionMode
+import com.example.trencadisapp.midi.MidiOutputMode
 import com.example.trencadisapp.ui.AcidModulation
 import com.example.trencadisapp.ui.BlobModulation
 import org.json.JSONObject
@@ -25,7 +26,12 @@ data class Preset(
     val selectionMode: PixelSelectionMode,
     val useFrontCamera: Boolean,
     val useBlobMode: Boolean = false,
-    val blobModulation: BlobModulation = BlobModulation()
+    val blobModulation: BlobModulation = BlobModulation(),
+    val customGridResolution: Int? = null,
+    val midiEnabled: Boolean = false,
+    val midiOutputMode: MidiOutputMode = MidiOutputMode.INTERNAL,
+    val midiChannel: Int = 1,
+    val bleEnabled: Boolean = false
 ) {
     private fun Float.round2(): Double = (round(this * 100) / 100).toDouble()
     
@@ -79,6 +85,13 @@ data class Preset(
             put("selectionMode", selectionMode.name)
             put("useFrontCamera", useFrontCamera)
             put("useBlobMode", useBlobMode)
+            put("customGridResolution", customGridResolution)
+            put("midi", JSONObject().apply {
+                put("enabled", midiEnabled)
+                put("outputMode", midiOutputMode.name)
+                put("channel", midiChannel)
+                put("bleEnabled", bleEnabled)
+            })
             put("blob", JSONObject().apply {
                 put("hueBuckets", blobModulation.hueBuckets)
                 put("minBlobSize", blobModulation.minBlobSize)
@@ -145,6 +158,16 @@ data class Preset(
                 },
                 useFrontCamera = json.optBoolean("useFrontCamera", false),
                 useBlobMode = json.optBoolean("useBlobMode", false),
+                customGridResolution = json.optInt("customGridResolution", -1)
+                    .takeIf { it >= 20 },
+                midiEnabled = json.optJSONObject("midi")?.optBoolean("enabled", false) ?: false,
+                midiOutputMode = try {
+                    MidiOutputMode.valueOf(
+                        json.optJSONObject("midi")?.optString("outputMode", "INTERNAL") ?: "INTERNAL"
+                    )
+                } catch (e: Exception) { MidiOutputMode.INTERNAL },
+                midiChannel = json.optJSONObject("midi")?.optInt("channel", 1) ?: 1,
+                bleEnabled = json.optJSONObject("midi")?.optBoolean("bleEnabled", false) ?: false,
                 blobModulation = if (blob != null) BlobModulation(
                     hueBuckets = blob.optInt("hueBuckets", 16),
                     minBlobSize = blob.optInt("minBlobSize", 50),

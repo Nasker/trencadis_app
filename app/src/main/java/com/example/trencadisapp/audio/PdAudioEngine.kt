@@ -183,6 +183,7 @@ class PdAudioEngine(private val context: Context) {
     fun setOscillatorNoise(on: Boolean) = sendFloat("Noi", if (on) 1f else 0f)
     
     fun setSequencerOn(on: Boolean) = sendFloat("onSEQ", if (on) 1f else 0f)
+    fun setMetroOn(on: Boolean) = sendFloat("metroSEQ", if (on) 1f else 0f)
     fun setSequencerPeriod(period: Float) = sendFloat("periodSEQ", period)
     fun setBPDFreq(freq: Float) = sendFloat("BPDFreq", freq)
     

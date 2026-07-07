@@ -175,15 +175,16 @@ class TrencadisViewModel(application: Application) : AndroidViewModel(applicatio
                 // While locked to external clock the Pd metro is silenced and
                 // steps are driven from MIDI ticks; on clock loss the internal
                 // metro takes over again (except in manual pointer mode).
+                // Only the metro stops — onSEQ stays on so the bang-triggered
+                // envelope keeps sounding the internal synth on external ticks.
                 if (connected) {
                     resetExternalClockPhase()
-                    pdEngine.setSequencerOn(false)
                 } else {
                     // Release the note the last externally-clocked step left
                     // sounding; the internal metro will retrigger from here.
                     noteRouter.allNotesOff(_state.value.midiState.channel)
-                    pdEngine.setSequencerOn(_state.value.selectionMode != PixelSelectionMode.POINTER)
                 }
+                applySequencerState()
             }
         }
         viewModelScope.launch {
@@ -346,7 +347,7 @@ class TrencadisViewModel(application: Application) : AndroidViewModel(applicatio
     }
 
     private fun freqToMidiPitch(freq: Float): Int =
-        (69 + 12 * Math.log(freq / 440.0) / Math.log(2.0)).toInt().coerceIn(0, 127)
+        Math.round(69 + 12 * Math.log(freq / 440.0) / Math.log(2.0)).toInt().coerceIn(0, 127)
 
     private fun incrementSequenceIndex() {
         _state.update { state ->
@@ -380,9 +381,20 @@ class TrencadisViewModel(application: Application) : AndroidViewModel(applicatio
 
         // Update sequencer state — the internal metro stays off while an
         // external MIDI clock is driving the steps.
-        val sequencerOn = mode != PixelSelectionMode.POINTER &&
-            !_state.value.midiState.isClockLocked
-        pdEngine.setSequencerOn(sequencerOn)
+        applySequencerState()
+    }
+
+    /**
+     * onSEQ selects the bang-triggered envelope path in the patch and must stay
+     * on whenever steps are bang-driven — by the internal metro or by external
+     * MIDI ticks. metroSEQ only gates the internal metro, which yields to the
+     * external clock while locked.
+     */
+    private fun applySequencerState() {
+        val state = _state.value
+        val bangDriven = state.selectionMode != PixelSelectionMode.POINTER
+        pdEngine.setSequencerOn(bangDriven)
+        pdEngine.setMetroOn(bangDriven && !state.midiState.isClockLocked)
     }
 
     private fun defaultBlockSizeFor(mode: PixelSelectionMode): Int = when (mode) {
@@ -552,7 +564,12 @@ class TrencadisViewModel(application: Application) : AndroidViewModel(applicatio
             selectionMode = currentState.selectionMode,
             useFrontCamera = currentState.useFrontCamera,
             useBlobMode = currentState.useBlobMode,
-            blobModulation = currentState.blobModulation
+            blobModulation = currentState.blobModulation,
+            customGridResolution = currentState.customGridResolution,
+            midiEnabled = currentState.midiState.enabled,
+            midiOutputMode = currentState.midiState.outputMode,
+            midiChannel = currentState.midiState.channel,
+            bleEnabled = currentState.midiState.bleEnabled
         )
         presetManager.savePreset(preset)
         refreshPresetList()
@@ -569,7 +586,15 @@ class TrencadisViewModel(application: Application) : AndroidViewModel(applicatio
                 selectionMode = preset.selectionMode,
                 useFrontCamera = preset.useFrontCamera,
                 useBlobMode = preset.useBlobMode,
-                blobModulation = preset.blobModulation
+                blobModulation = preset.blobModulation,
+                customGridResolution = preset.customGridResolution,
+                blockSize = preset.customGridResolution ?: defaultBlockSizeFor(preset.selectionMode),
+                midiState = it.midiState.copy(
+                    enabled = preset.midiEnabled,
+                    outputMode = preset.midiOutputMode,
+                    channel = preset.midiChannel,
+                    bleEnabled = preset.bleEnabled
+                )
             )
         }
         // Apply loaded state to audio engine
@@ -577,6 +602,13 @@ class TrencadisViewModel(application: Application) : AndroidViewModel(applicatio
         applyMusicState(preset.musicState)
         // Apply selection mode to sequencer
         setSelectionMode(preset.selectionMode)
+        // Apply MIDI routing
+        setMidiEnabled(preset.midiEnabled)
+        if (preset.midiEnabled) {
+            setMidiOutputMode(preset.midiOutputMode)
+            setMidiChannel(preset.midiChannel)
+            if (preset.bleEnabled) setBleEnabled(true)
+        }
     }
     
     fun deletePreset(name: String) {
