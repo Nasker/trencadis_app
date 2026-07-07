@@ -1,5 +1,5 @@
 {
-  "name": "Cubist Dawn",
+  "name": "Kaleidoscope",
   "version": 1,
   "synth": {
     "subOsc": true,
@@ -7,40 +7,40 @@
     "sawOsc": false,
     "sqrOsc": false,
     "noiseOsc": false,
-    "cutoff": 0.6,
-    "resonance": 0.15,
-    "envelope": 0.1,
+    "cutoff": 0.65,
+    "resonance": 0.25,
+    "envelope": 0.3,
     "attack": 0.3,
     "release": 0.5,
     "distortion": 0.0,
-    "fm": 0.05,
+    "fm": 0.15,
     "fmAmount": 0.1,
-    "chorusFreq": 0.15,
-    "chorusMod": 0.2,
-    "delayFigure": 2.0,
+    "chorusFreq": 0.3,
+    "chorusMod": 0.5,
+    "delayFigure": 2.5,
     "feedback": 0.3
   },
   "music": {
     "scaleIndex": 0,
-    "keyIndex": 0,
+    "keyIndex": 7,
     "octaveIndex": 2,
     "figureIndex": 2,
-    "tempo": 90.0
+    "tempo": 105.0
   },
   "acid": {
     "enabled": true,
-    "hueAmount": 0.4,
-    "sizeAmount": 0.25,
-    "rotationAmount": 0.3,
-    "alphaAmount": 0.25,
-    "animationSpeed": 0.08,
-    "brightnessSizeBoost": 0.12
+    "hueAmount": 0.8,
+    "sizeAmount": 0.4,
+    "rotationAmount": 0.9,
+    "alphaAmount": 0.3,
+    "animationSpeed": 0.12,
+    "brightnessSizeBoost": 0.1
   },
-  "acidPatternIndex": 0,
+  "acidPatternIndex": 3,
   "selectionMode": "SEQUENCE",
   "useFrontCamera": false,
   "useBlobMode": true,
-  "customGridResolution": null,
+  "customGridResolution": 55,
   "midi": {
     "enabled": false,
     "outputMode": "INTERNAL",
@@ -48,13 +48,13 @@
     "bleEnabled": false
   },
   "blob": {
-    "hueBuckets": 16,
-    "minBlobSize": 50,
-    "maxBlobSize": 800,
-    "maxBlobs": 500,
-    "blobBlend": 0.85,
-    "outlineWidth": 10.0,
-    "outlineAlpha": 0.5,
+    "hueBuckets": 24,
+    "minBlobSize": 30,
+    "maxBlobSize": 400,
+    "maxBlobs": 600,
+    "blobBlend": 0.9,
+    "outlineWidth": 3.0,
+    "outlineAlpha": 0.2,
     "blobsOnTop": true
   }
 }

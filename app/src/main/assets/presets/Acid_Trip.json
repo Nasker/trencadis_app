@@ -40,9 +40,17 @@
   "selectionMode": "SEQUENCE",
   "useFrontCamera": false,
   "useBlobMode": true,
+  "customGridResolution": null,
+  "midi": {
+    "enabled": false,
+    "outputMode": "INTERNAL",
+    "channel": 1,
+    "bleEnabled": false
+  },
   "blob": {
     "hueBuckets": 16,
     "minBlobSize": 50,
+    "maxBlobSize": 800,
     "maxBlobs": 500,
     "blobBlend": 0.9,
     "outlineWidth": 10.0,

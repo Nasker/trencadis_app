@@ -23,7 +23,7 @@ object MusicConstants {
         // Ionian (Major)
         floatArrayOf(1f, 1.1225f, 1.2599f, 1.3348f, 1.4983f, 1.6818f, 1.8877f, 2f, 2.2449f, 2.5198f, 2.6697f, 2.9966f, 3.3636f, 3.7755f, 4f),
         // Dorian
-        floatArrayOf(1f, 1.1225f, 1.1892f, 1.3348f, 1.4983f, 1.6818f, 1.7818f, 2f, 2.1189f, 2.3784f, 2.6697f, 2.9966f, 3.3636f, 3.5636f, 4f),
+        floatArrayOf(1f, 1.1225f, 1.1892f, 1.3348f, 1.4983f, 1.6818f, 1.7818f, 2f, 2.2449f, 2.3784f, 2.6697f, 2.9966f, 3.3636f, 3.5636f, 4f),
         // Phrygian
         floatArrayOf(1f, 1.0595f, 1.1892f, 1.3348f, 1.4983f, 1.5874f, 1.7818f, 2f, 2.1189f, 2.3784f, 2.6697f, 2.9966f, 3.1748f, 3.5636f, 4f),
         // Lydian
@@ -65,9 +65,11 @@ object MusicConstants {
     ): Float {
         val rootFreq = getRootFrequency(keyIndex)
         val nNotes = NOTES_PER_SCALE[scaleIndex]
-        val chromStep = ((hue / 360f) * nNotes).toInt().coerceIn(0, nNotes - 1)
         val scaleSteps = DIATONIC_STEPS[scaleIndex]
-        val stepRatio = if (chromStep < scaleSteps.size) scaleSteps[chromStep] else 1f
+        // Round like the original (chromStep can reach nNotes, the top note of
+        // the two-octave table) instead of flooring, which never played it.
+        val chromStep = Math.round((hue / 360f) * nNotes).coerceIn(0, scaleSteps.size - 1)
+        val stepRatio = scaleSteps[chromStep]
         return OCTAVE_MULTIPLIERS[octaveIndex] * rootFreq * stepRatio
     }
 }

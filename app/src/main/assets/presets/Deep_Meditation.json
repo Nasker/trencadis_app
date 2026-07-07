@@ -40,9 +40,17 @@
   "selectionMode": "CENTER",
   "useFrontCamera": false,
   "useBlobMode": true,
+  "customGridResolution": null,
+  "midi": {
+    "enabled": false,
+    "outputMode": "INTERNAL",
+    "channel": 1,
+    "bleEnabled": false
+  },
   "blob": {
     "hueBuckets": 12,
     "minBlobSize": 80,
+    "maxBlobSize": 1000,
     "maxBlobs": 300,
     "blobBlend": 0.7,
     "outlineWidth": 10.0,
