@@ -21,6 +21,7 @@
     <p class="tagline">It breaks what the camera sees into a mosaic of shards and tiles — <b>and plays them.</b> Colour becomes pitch, light becomes loudness, and everything lands in key.</p>
     <div class="cta-row">
       <a class="btn btn-primary" href="https://github.com/Nasker/trencadis_app">View on GitHub</a>
+      <a class="btn btn-primary" href="#get">📱 Download</a>
       <a class="btn btn-ghost" href="#story">The story ↓</a>
     </div>
   </div>
@@ -166,19 +167,30 @@
   <section class="get" id="get">
     <div class="col">
       <p class="kicker">Get it</p>
-      <h2>Build it, break it, make mosaics</h2>
+      <h2>Try it now — or build it yourself</h2>
+      
+      <div class="cta-row" style="justify-content:flex-start;margin-bottom:2.4rem">
+        <a class="btn btn-primary" href="https://appdistribution.firebase.dev/i/98c5d91f864e83fb">📱 Download for Android</a>
+        <a class="btn btn-ghost" href="https://github.com/Nasker/trencadis_app">View on GitHub</a>
+      </div>
+      
+      <div class="requirements" style="background:#f8f9fa;padding:1.2rem;border-radius:8px;margin-bottom:2rem">
+        <h4 style="margin:0 0 0.8rem 0;color:#333">Requirements:</h4>
+        <ul style="margin:0;padding-left:1.2rem;color:#666">
+          <li>Android 7.0+ (API 24)</li>
+          <li>Camera permission required</li>
+          <li>Optional: Bluetooth MIDI controllers</li>
+        </ul>
+      </div>
+      
       <div class="codebox"><span class="c"># clone and install on a connected device</span>
 git clone https://github.com/Nasker/trencadis_app.git
 cd trencadis_app
 ./gradlew installDebug</div>
       <p class="fineprint">
-        <b>Requires</b> · Android 7.0+ (API 24) · camera permission · Bluetooth permission for BLE MIDI<br>
         <b>Built with</b> · Kotlin · Jetpack Compose · CameraX · pd-for-android · Material 3<br>
         <b>License</b> · The Unlicense — public domain. Take the tiles, build your own mosaic.
       </p>
-      <div class="cta-row" style="justify-content:flex-start;margin-top:1.8rem">
-        <a class="btn btn-primary" href="https://github.com/Nasker/trencadis_app">github.com/Nasker/trencadis_app</a>
-      </div>
     </div>
   </section>
 </main>

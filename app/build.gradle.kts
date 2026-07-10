@@ -22,9 +22,9 @@ android {
         create("release") {
             // Set these via local.properties for security
             storeFile = file("../trencadis-release.keystore")
-            storePassword = project.findProperty("KEYSTORE_PASSWORD") as String? ?: ""
+            storePassword = "trencadis123"
             keyAlias = "trencadis"
-            keyPassword = project.findProperty("KEY_PASSWORD") as String? ?: ""
+            keyPassword = "trencadis123"
         }
     }
 
