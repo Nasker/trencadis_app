@@ -48,3 +48,8 @@ Thumbs.db
 # Misc
 *.hprof
 captures/
+
+# Signing keys
+*.keystore
+*.jks
+trencadis-release.keystore
