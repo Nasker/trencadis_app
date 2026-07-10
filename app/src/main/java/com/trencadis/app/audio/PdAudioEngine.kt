@@ -155,6 +155,13 @@ class PdAudioEngine(private val context: Context) {
         }
     }
     
+    fun sendAudioBuffer(receiver: String, buffer: FloatArray) {
+        if (isInitialized) {
+            // Write audio buffer to a PD array
+            PdBase.writeArray(receiver, 0, buffer, 0, buffer.size)
+        }
+    }
+    
     // Synth parameter methods
     fun setFrequency(freq: Float) = sendFloat("Freq", freq)
     fun setGain(gain: Float) = sendFloat("Gain", gain)

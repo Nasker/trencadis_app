@@ -150,11 +150,25 @@ fun CubistCanvas(
                 val dx = gridX - rippleOrigin.gridX
                 val dy = gridY - rippleOrigin.gridY
                 val dist = kotlin.math.sqrt(dx * dx + dy * dy)
-                // Wave travels ~1.5 cells per envelope sample
-                val idx = (dist / 1.5f).toInt()
+                // Wave travels faster now - ~2.5 cells per envelope sample
+                val idx = (dist / 2.5f).toInt()
                 if (idx >= envelopeTrail.size) return 1f
-                val attenuation = 1f / (1f + dist * 0.12f)
-                return 1f + 0.22f * envelopeTrail[idx] * attenuation
+                // Less attenuation for wider reach, more prominent size boost
+                val attenuation = 1f / (1f + dist * 0.08f)
+                return 1f + 0.6f * envelopeTrail[idx] * attenuation
+            }
+            
+            fun rippleRotationAt(gridX: Float, gridY: Float): Float {
+                if (!rippleActive || rippleOrigin == null) return 0f
+                val dx = gridX - rippleOrigin.gridX
+                val dy = gridY - rippleOrigin.gridY
+                val dist = kotlin.math.sqrt(dx * dx + dy * dy)
+                // Same wave speed as scale ripple
+                val idx = (dist / 2.5f).toInt()
+                if (idx >= envelopeTrail.size) return 0f
+                // Rotation effect with distance attenuation
+                val attenuation = 1f / (1f + dist * 0.1f)
+                return 45f * envelopeTrail[idx] * attenuation // Up to 45 degrees rotation
             }
 
             // Sort pixels by effective brightness: dark/smaller shapes drawn first (back),
@@ -179,7 +193,8 @@ fun CubistCanvas(
                         starCos = starCos,
                         starSin = starSin,
                         globalAlpha = globalAlpha,
-                        rippleScale = rippleScaleAt(pixel.gridX.toFloat(), pixel.gridY.toFloat())
+                        rippleScale = rippleScaleAt(pixel.gridX.toFloat(), pixel.gridY.toFloat()),
+                        rippleRotation = rippleRotationAt(pixel.gridX.toFloat(), pixel.gridY.toFloat())
                     )
                 }
             }
@@ -197,7 +212,8 @@ fun CubistCanvas(
                     if (blobAlpha > 0.01f) {
                         for (blob in sortedBlobs) {
                             drawBlobPolygon(blob, blockWidth, blockHeight, blobModulation, acidPattern, acidModulation,
-                                rippleScale = rippleScaleAt(blob.center.x, blob.center.y))
+                                rippleScale = rippleScaleAt(blob.center.x, blob.center.y),
+                                rippleRotation = rippleRotationAt(blob.center.x, blob.center.y))
                         }
                     }
                 } else {
@@ -205,7 +221,8 @@ fun CubistCanvas(
                     if (blobAlpha > 0.01f) {
                         for (blob in sortedBlobs) {
                             drawBlobPolygon(blob, blockWidth, blockHeight, blobModulation, acidPattern, acidModulation,
-                                rippleScale = rippleScaleAt(blob.center.x, blob.center.y))
+                                rippleScale = rippleScaleAt(blob.center.x, blob.center.y),
+                                rippleRotation = rippleRotationAt(blob.center.x, blob.center.y))
                         }
                     }
                     if (tileAlpha > 0.01f) drawTilesAt(tileAlpha)
@@ -242,7 +259,8 @@ private fun DrawScope.drawCubistShapeOptimized(
     starCos: FloatArray,
     starSin: FloatArray,
     globalAlpha: Float = 1f,
-    rippleScale: Float = 1f
+    rippleScale: Float = 1f,
+    rippleRotation: Float = 0f
 ) {
     val x = pixel.gridX * blockWidth + blockWidth / 2
     val y = pixel.gridY * blockHeight + blockHeight / 2
@@ -271,6 +289,9 @@ private fun DrawScope.drawCubistShapeOptimized(
     if (acidModulation.enabled && acidModulation.rotationAmount > 0f) {
         rotation += acidPattern.getRotationModulation(acidAngle, 90f * acidModulation.rotationAmount)
     }
+    
+    // Add ripple rotation
+    rotation += rippleRotation
     
     // OPTIMIZED: Skip HSV conversion when acid hue modulation is off
     // Just boost saturation directly in RGB space (approximate but fast)
@@ -403,7 +424,8 @@ private fun DrawScope.drawBlobPolygon(
     blobModulation: BlobModulation?,
     acidPattern: AcidPattern,
     acidModulation: AcidModulation,
-    rippleScale: Float = 1f
+    rippleScale: Float = 1f,
+    rippleRotation: Float = 0f
 ) {
     if (blob.hull.size < 3) return
 
@@ -455,13 +477,20 @@ private fun DrawScope.drawBlobPolygon(
         baseColor.copy(alpha = blobAlpha)
     }
 
-    drawPath(path = path, color = fillColor)
+    // Apply rotation around blob center
+    val blobCenterX = blob.center.x * blockWidth
+    val blobCenterY = blob.center.y * blockHeight
+    rotate(degrees = rippleRotation, pivot = Offset(blobCenterX, blobCenterY)) {
+        drawPath(path = path, color = fillColor)
+    }
 
     // Dark outline to reinforce the mosaic/cubist edges
     val outlineWidth = blobModulation?.outlineWidth?.coerceAtLeast(0f) ?: 3f
     val outlineAlpha = blobModulation?.outlineAlpha?.coerceIn(0f, 1f) ?: 0.5f
     if (outlineWidth > 0f && outlineAlpha > 0f) {
-        drawPath(path = path, color = Color.Black.copy(alpha = outlineAlpha), style = Stroke(width = outlineWidth))
+        rotate(degrees = rippleRotation, pivot = Offset(blobCenterX, blobCenterY)) {
+            drawPath(path = path, color = Color.Black.copy(alpha = outlineAlpha), style = Stroke(width = outlineWidth))
+        }
     }
 }
 
