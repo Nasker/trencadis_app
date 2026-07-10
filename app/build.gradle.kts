@@ -5,11 +5,11 @@ plugins {
 }
 
 android {
-    namespace = "com.example.trencadisapp"
+    namespace = "com.trencadis.app"
     compileSdk = 36
 
     defaultConfig {
-        applicationId = "com.example.trencadisapp"
+        applicationId = "com.trencadis.app"
         minSdk = 24
         targetSdk = 36
         versionCode = 1
@@ -20,11 +20,11 @@ android {
 
     signingConfigs {
         create("release") {
-            // Set these via environment variables or local.properties for security
+            // Set these via local.properties for security
             storeFile = file("../trencadis-release.keystore")
-            storePassword = System.getenv("KEYSTORE_PASSWORD") ?: ""
+            storePassword = project.findProperty("KEYSTORE_PASSWORD") as String? ?: ""
             keyAlias = "trencadis"
-            keyPassword = System.getenv("KEY_PASSWORD") ?: ""
+            keyPassword = project.findProperty("KEY_PASSWORD") as String? ?: ""
         }
     }
 
