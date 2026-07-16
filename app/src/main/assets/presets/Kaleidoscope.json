@@ -25,6 +25,8 @@
     "keyIndex": 7,
     "octaveIndex": 2,
     "figureIndex": 2,
+    "chordTypeIndex": 0,
+    "useChordMapping": false,
     "tempo": 105.0
   },
   "acid": {
@@ -52,7 +54,7 @@
     "minBlobSize": 30,
     "maxBlobSize": 400,
     "maxBlobs": 600,
-    "blobBlend": 0.9,
+    "blobBlend": 0.45,
     "outlineWidth": 3.0,
     "outlineAlpha": 0.2,
     "blobsOnTop": true

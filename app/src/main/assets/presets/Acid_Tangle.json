@@ -1,0 +1,62 @@
+{
+  "name": "Acid Tangle",
+  "version": 1,
+  "synth": {
+    "subOsc": false,
+    "sinOsc": false,
+    "sawOsc": true,
+    "sqrOsc": true,
+    "noiseOsc": false,
+    "cutoff": 0.35,
+    "resonance": 0.55,
+    "envelope": 0.4,
+    "attack": 0.0,
+    "release": 0.2,
+    "distortion": 0.2,
+    "fm": 0.15,
+    "fmAmount": 0.25,
+    "chorusFreq": 0.35,
+    "chorusMod": 0.45,
+    "delayFigure": 1.0,
+    "feedback": 0.22
+  },
+  "music": {
+    "scaleIndex": 9,
+    "keyIndex": 2,
+    "octaveIndex": 2,
+    "figureIndex": 1,
+    "chordTypeIndex": 3,
+    "useChordMapping": false,
+    "tempo": 120.0
+  },
+  "acid": {
+    "enabled": true,
+    "hueAmount": 0.9,
+    "sizeAmount": 0.7,
+    "rotationAmount": 0.9,
+    "alphaAmount": 0.35,
+    "animationSpeed": 0.4,
+    "brightnessSizeBoost": 0.25
+  },
+  "acidPatternIndex": 5,
+  "selectionMode": "SEQUENCE",
+  "useFrontCamera": false,
+  "useBlobMode": true,
+  "customGridResolution": 45,
+  "midi": {
+    "enabled": false,
+    "outputMode": "INTERNAL",
+    "channel": 1,
+    "bleEnabled": false
+  },
+  "blob": {
+    "hueBuckets": 8,
+    "minBlobSize": 30,
+    "maxBlobSize": 500,
+    "maxBlobs": 700,
+    "blobBlend": 0.3,
+    "outlineWidth": 5.0,
+    "outlineAlpha": 0.3,
+    "blobsOnTop": true
+  }
+}

@@ -1,23 +1,23 @@
 {
-  "name": "Stained Glass",
+  "name": "Glass Blend",
   "version": 1,
   "synth": {
-    "subOsc": false,
+    "subOsc": true,
     "sinOsc": true,
     "sawOsc": false,
     "sqrOsc": false,
     "noiseOsc": false,
-    "cutoff": 0.5,
-    "resonance": 0.15,
+    "cutoff": 0.7,
+    "resonance": 0.2,
     "envelope": 0.1,
-    "attack": 0.5,
-    "release": 0.8,
+    "attack": 0.4,
+    "release": 0.9,
     "distortion": 0.0,
     "fm": 0.0,
     "fmAmount": 0.0,
-    "chorusFreq": 0.15,
-    "chorusMod": 0.2,
-    "delayFigure": 3.0,
+    "chorusFreq": 0.2,
+    "chorusMod": 0.3,
+    "delayFigure": 2.5,
     "feedback": 0.25
   },
   "music": {
@@ -25,21 +25,21 @@
     "keyIndex": 0,
     "octaveIndex": 2,
     "figureIndex": 4,
-    "chordTypeIndex": 0,
-    "useChordMapping": false,
-    "tempo": 72.0
+    "chordTypeIndex": 4,
+    "useChordMapping": true,
+    "tempo": 85.0
   },
   "acid": {
-    "enabled": false,
-    "hueAmount": 0.3,
+    "enabled": true,
+    "hueAmount": 0.2,
     "sizeAmount": 0.2,
-    "rotationAmount": 0.1,
-    "alphaAmount": 0.5,
-    "animationSpeed": 0.03,
-    "brightnessSizeBoost": 0.06
+    "rotationAmount": 0.15,
+    "alphaAmount": 0.2,
+    "animationSpeed": 0.06,
+    "brightnessSizeBoost": 0.05
   },
-  "acidPatternIndex": 0,
-  "selectionMode": "BRIGHTEST",
+  "acidPatternIndex": 3,
+  "selectionMode": "SEQUENCE",
   "useFrontCamera": false,
   "useBlobMode": true,
   "customGridResolution": 70,
@@ -51,12 +51,12 @@
   },
   "blob": {
     "hueBuckets": 32,
-    "minBlobSize": 40,
+    "minBlobSize": 60,
     "maxBlobSize": 500,
     "maxBlobs": 400,
-    "blobBlend": 0.35,
+    "blobBlend": 0.5,
     "outlineWidth": 8.0,
-    "outlineAlpha": 0.7,
+    "outlineAlpha": 0.6,
     "blobsOnTop": true
   }
 }

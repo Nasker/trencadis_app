@@ -1,5 +1,5 @@
 {
-  "name": "Ambient Pad",
+  "name": "Chord Mosaic",
   "version": 1,
   "synth": {
     "subOsc": true,
@@ -10,39 +10,39 @@
     "cutoff": 0.5,
     "resonance": 0.1,
     "envelope": 0.0,
-    "attack": 0.6,
+    "attack": 0.5,
     "release": 0.8,
     "distortion": 0.0,
-    "fm": 0.1,
-    "fmAmount": 0.2,
+    "fm": 0.0,
+    "fmAmount": 0.0,
     "chorusFreq": 0.3,
     "chorusMod": 0.4,
     "delayFigure": 3.0,
-    "feedback": 0.4
+    "feedback": 0.35
   },
   "music": {
-    "scaleIndex": 5,
-    "keyIndex": 7,
+    "scaleIndex": 0,
+    "keyIndex": 5,
     "octaveIndex": 3,
-    "figureIndex": 1,
-    "chordTypeIndex": 0,
-    "useChordMapping": false,
-    "tempo": 70.0
+    "figureIndex": 2,
+    "chordTypeIndex": 5,
+    "useChordMapping": true,
+    "tempo": 75.0
   },
   "acid": {
-    "enabled": true,
+    "enabled": false,
     "hueAmount": 0.3,
     "sizeAmount": 0.2,
-    "rotationAmount": 0.2,
-    "alphaAmount": 0.4,
+    "rotationAmount": 0.1,
+    "alphaAmount": 0.3,
     "animationSpeed": 0.05,
-    "brightnessSizeBoost": 0.08
+    "brightnessSizeBoost": 0.06
   },
-  "acidPatternIndex": 1,
-  "selectionMode": "CENTER",
+  "acidPatternIndex": 0,
+  "selectionMode": "BRIGHTEST",
   "useFrontCamera": false,
   "useBlobMode": true,
-  "customGridResolution": null,
+  "customGridResolution": 80,
   "midi": {
     "enabled": false,
     "outputMode": "INTERNAL",
@@ -50,13 +50,13 @@
     "bleEnabled": false
   },
   "blob": {
-    "hueBuckets": 8,
-    "minBlobSize": 100,
-    "maxBlobSize": 600,
-    "maxBlobs": 200,
-    "blobBlend": 0.5,
-    "outlineWidth": 10.0,
-    "outlineAlpha": 0.3,
+    "hueBuckets": 16,
+    "minBlobSize": 80,
+    "maxBlobSize": 900,
+    "maxBlobs": 300,
+    "blobBlend": 0.4,
+    "outlineWidth": 12.0,
+    "outlineAlpha": 0.5,
     "blobsOnTop": true
   }
 }

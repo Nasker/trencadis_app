@@ -25,6 +25,8 @@
     "keyIndex": 3,
     "octaveIndex": 1,
     "figureIndex": 5,
+    "chordTypeIndex": 0,
+    "useChordMapping": false,
     "tempo": 140.0
   },
   "acid": {
