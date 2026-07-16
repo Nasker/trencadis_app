@@ -12,6 +12,8 @@ import com.trencadis.app.audio.PdAudioEngine
 import com.trencadis.app.camera.PixelData
 import com.trencadis.app.camera.PixelGrid
 import com.trencadis.app.camera.PixelSelectionMode
+import com.trencadis.app.media.MediaCaptureState
+import com.trencadis.app.media.RawMediaCaptureManager
 import com.trencadis.app.ui.AcidModulation
 import com.trencadis.app.ui.AcidPattern
 import com.trencadis.app.ui.BlobModulation
@@ -95,7 +97,8 @@ data class TrencadisState(
     val midiState: MidiState = MidiState(),
     // Recent amp-envelope samples from Pd (~30Hz, newest first). The canvas
     // samples this delayed by grid distance to ripple outward from the note.
-    val envelopeTrail: List<Float> = emptyList()
+    val envelopeTrail: List<Float> = emptyList(),
+    val mediaCaptureState: MediaCaptureState = MediaCaptureState()
 )
 
 class TrencadisViewModel(application: Application) : AndroidViewModel(application) {
@@ -115,6 +118,9 @@ class TrencadisViewModel(application: Application) : AndroidViewModel(applicatio
     
     private val pdEngine = PdAudioEngine(application)
     private val presetManager = PresetManager(application)
+
+    // Raw still/video capture of the live camera feed, independent of audio/MIDI.
+    val mediaCaptureManager = RawMediaCaptureManager(application)
 
     private val pdNoteDestination = PdNoteDestination(pdEngine)
     private val midiNoteDestination = MidiNoteDestination()
@@ -164,6 +170,12 @@ class TrencadisViewModel(application: Application) : AndroidViewModel(applicatio
         // Copy bundled presets on first launch
         presetManager.copyBundledPresetsIfNeeded()
         refreshPresetList()
+
+        viewModelScope.launch {
+            mediaCaptureManager.captureState.collect { captureState ->
+                _state.update { it.copy(mediaCaptureState = captureState) }
+            }
+        }
 
         // Start collecting MIDI clock (no-op until device connects)
         midiClockSource.onStart = { resetExternalClockPhase() }

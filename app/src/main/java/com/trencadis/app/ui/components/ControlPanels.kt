@@ -38,6 +38,8 @@ fun ModesPanel(
     onToggleCamera: () -> Unit,
     onGridResolutionChanged: (Int) -> Unit,
     onGridResolutionReset: () -> Unit,
+    isFrameFrozen: Boolean = false,
+    onCaptureStill: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     Column(
@@ -97,6 +99,31 @@ fun ModesPanel(
                 text = if (useFrontCamera) "FRONT" else "BACK",
                 color = Color.White,
                 fontSize = 10.sp,
+                fontWeight = FontWeight.Bold
+            )
+        }
+
+        Spacer(modifier = Modifier.height(4.dp))
+
+        // Freeze the live feed into a still frame (fed to graphics + audio),
+        // or resume the live camera if already frozen.
+        Box(
+            modifier = Modifier
+                .size(60.dp, 32.dp)
+                .clip(RoundedCornerShape(8.dp))
+                .background(if (isFrameFrozen) Color(0xFFE53935) else Color(0xFF424242))
+                .border(
+                    width = 2.dp,
+                    color = Color.White.copy(alpha = 0.5f),
+                    shape = RoundedCornerShape(8.dp)
+                )
+                .clickable(onClick = onCaptureStill),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                text = if (isFrameFrozen) "▶ LIVE" else "📸 FREEZE",
+                color = Color.White,
+                fontSize = 9.sp,
                 fontWeight = FontWeight.Bold
             )
         }

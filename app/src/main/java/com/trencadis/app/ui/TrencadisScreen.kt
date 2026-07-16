@@ -113,6 +113,17 @@ fun TrencadisScreen(
     
     // Hide/show icons with two-finger tap
     var iconsVisible by remember { mutableStateOf(true) }
+
+    // Stable reference to the live camera analyzer, used to trigger still capture
+    // from the capture button without threading state through the camera composable.
+    val analyzerRef = remember { AtomicReference<CameraPixelAnalyzer?>(null) }
+    // Mirrors the analyzer's frozen/live status so the UI can reflect it.
+    var isFrameFrozen by remember { mutableStateOf(false) }
+    // The analyzer is recreated when these change (see key() below), which drops
+    // any freeze it was holding — keep the UI mirror in sync.
+    LaunchedEffect(state.blockSize, state.useFrontCamera, state.screenAspectRatio) {
+        isFrameFrozen = false
+    }
     
     Box(
         modifier = Modifier
@@ -126,6 +137,8 @@ fun TrencadisScreen(
                 useFrontCamera = state.useFrontCamera,
                 screenAspectRatio = state.screenAspectRatio,
                 blobModulation = if (state.useBlobMode) state.blobModulation else null,
+                mediaCaptureManager = viewModel.mediaCaptureManager,
+                analyzerRef = analyzerRef,
                 onPixelGridReady = { grid ->
                     viewModel.updatePixelGrid(grid)
                 }
@@ -215,7 +228,19 @@ fun TrencadisScreen(
                     onModeSelected = { viewModel.setSelectionMode(it) },
                     onToggleCamera = { viewModel.toggleCamera() },
                     onGridResolutionChanged = { viewModel.setGridResolution(it) },
-                    onGridResolutionReset = { viewModel.resetGridResolution() }
+                    onGridResolutionReset = { viewModel.resetGridResolution() },
+                    isFrameFrozen = isFrameFrozen,
+                    onCaptureStill = {
+                        if (isFrameFrozen) {
+                            analyzerRef.get()?.resumeLiveCamera()
+                            isFrameFrozen = false
+                            android.widget.Toast.makeText(context, "Live camera resumed", android.widget.Toast.LENGTH_SHORT).show()
+                        } else {
+                            analyzerRef.get()?.captureStillImage()
+                            isFrameFrozen = true
+                            android.widget.Toast.makeText(context, "Frame frozen & saved", android.widget.Toast.LENGTH_SHORT).show()
+                        }
+                    }
                 )
             }
             
@@ -369,14 +394,15 @@ private fun CameraPreviewWithAnalysis(
     useFrontCamera: Boolean,
     screenAspectRatio: Float,
     blobModulation: com.trencadis.app.ui.BlobModulation?,
+    mediaCaptureManager: com.trencadis.app.media.RawMediaCaptureManager? = null,
+    analyzerRef: AtomicReference<CameraPixelAnalyzer?> = remember { AtomicReference(null) },
     onPixelGridReady: (com.trencadis.app.camera.PixelGrid) -> Unit
 ) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
+    val coroutineScope = androidx.compose.runtime.rememberCoroutineScope()
 
     val cameraExecutor = remember { Executors.newSingleThreadExecutor() }
-    // Stable reference to the current analyzer; updated in-place for blob params
-    val analyzerRef = remember { AtomicReference<CameraPixelAnalyzer?>(null) }
 
     // Hot-swap blob modulation on every recompose — no camera rebind required
     SideEffect { analyzerRef.get()?.blobModulation = blobModulation }
@@ -393,7 +419,9 @@ private fun CameraPreviewWithAnalysis(
                     mirrorHorizontally = useFrontCamera,
                     screenAspectRatio = screenAspectRatio,
                     blobModulation = blobModulation,
-                    onPixelGridReady = onPixelGridReady
+                    onPixelGridReady = onPixelGridReady,
+                    mediaCaptureManager = mediaCaptureManager,
+                    coroutineScope = coroutineScope
                 )
                 analyzerRef.set(newAnalyzer)
 
@@ -531,6 +559,7 @@ private fun EdgeHints(
                 onClick = onPresetClick
             )
         }
+
     }
 }
 

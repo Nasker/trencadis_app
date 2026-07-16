@@ -9,14 +9,22 @@ import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.ImageProxy
 import java.io.ByteArrayOutputStream
 import android.graphics.BitmapFactory
+import com.trencadis.app.media.RawMediaCaptureManager
 import com.trencadis.app.ui.BlobModulation
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 
 class CameraPixelAnalyzer(
     private val blockSize: Int = 20,
     private val mirrorHorizontally: Boolean = false,
     private val screenAspectRatio: Float = 9f / 16f, // width/height, portrait default
     @Volatile var blobModulation: BlobModulation? = null,
-    private val onPixelGridReady: (PixelGrid) -> Unit
+    private val onPixelGridReady: (PixelGrid) -> Unit,
+    // Optional raw still-image capture support. Both null by default so existing
+    // call sites are unaffected; pass both to enable captureStillImage().
+    private val mediaCaptureManager: RawMediaCaptureManager? = null,
+    private val coroutineScope: CoroutineScope? = null
 ) : ImageAnalysis.Analyzer {
     
     private var lastAnalysisTime = 0L
@@ -31,6 +39,30 @@ class CameraPixelAnalyzer(
     private var frameCount = 0
     private val blobFrameInterval = 2
     private var cachedBlobs: List<BlobDetector.PixelBlob> = emptyList()
+
+    // Set from the UI thread to request a still capture on the next analyzed frame.
+    @Volatile private var captureStillRequested: Boolean = false
+
+    // Once set, analyze() stops decoding new camera frames and keeps re-emitting
+    // this same grid at the normal cadence, so the rest of the pipeline (audio
+    // parameter mapping, sequencer stepping, visuals) keeps running off the
+    // frozen frame exactly as it would off a live one.
+    @Volatile private var frozenGrid: PixelGrid? = null
+
+    /**
+     * Request that the next analyzed camera frame be saved as a still image
+     * AND become the frozen source for the pixel grid (live camera pauses).
+     */
+    fun captureStillImage() {
+        captureStillRequested = true
+    }
+
+    /** Resume reading from the live camera feed after a freeze. */
+    fun resumeLiveCamera() {
+        frozenGrid = null
+    }
+
+    fun isFrozen(): Boolean = frozenGrid != null
     
     override fun analyze(image: ImageProxy) {
         val currentTime = System.currentTimeMillis()
@@ -39,18 +71,47 @@ class CameraPixelAnalyzer(
             return
         }
         lastAnalysisTime = currentTime
+
+        val frozen = frozenGrid
+        if (frozen != null) {
+            // Skip camera decoding entirely while frozen; just keep the
+            // downstream pipeline fed with the same static grid.
+            onPixelGridReady(frozen)
+            image.close()
+            return
+        }
         
         try {
             val bitmap = imageProxyToBitmap(image)
             if (bitmap != null) {
                 val pixelGrid = extractPixelGrid(bitmap, blockSize)
                 onPixelGridReady(pixelGrid)
+
+                if (captureStillRequested) {
+                    captureStillRequested = false
+                    captureStill(bitmap)
+                    frozenGrid = pixelGrid
+                }
+
                 bitmap.recycle()
             }
         } catch (e: Exception) {
             // Silently handle errors to avoid crashing
         } finally {
             image.close()
+        }
+    }
+
+    private fun captureStill(bitmap: Bitmap) {
+        val manager = mediaCaptureManager ?: return
+        val scope = coroutineScope ?: return
+        val stillBitmap = bitmap.copy(bitmap.config ?: Bitmap.Config.ARGB_8888, false)
+        scope.launch(Dispatchers.IO) {
+            try {
+                manager.captureStillFrame(stillBitmap)
+            } finally {
+                stillBitmap.recycle()
+            }
         }
     }
     
