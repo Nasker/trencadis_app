@@ -67,6 +67,8 @@ data class Preset(
                 put("keyIndex", musicState.keyIndex)
                 put("octaveIndex", musicState.octaveIndex)
                 put("figureIndex", musicState.figureIndex)
+                put("chordTypeIndex", musicState.chordTypeIndex)
+                put("useChordMapping", musicState.useChordMapping)
                 put("tempo", musicState.tempo.round2())
             })
             
@@ -138,6 +140,8 @@ data class Preset(
                     keyIndex = music.optInt("keyIndex", 0),
                     octaveIndex = music.optInt("octaveIndex", 2),
                     figureIndex = music.optInt("figureIndex", 2),
+                    chordTypeIndex = music.optInt("chordTypeIndex", 0),
+                    useChordMapping = music.optBoolean("useChordMapping", false),
                     tempo = music.optDouble("tempo", 120.0).toFloat(),
                     periodTempo = (60000f / music.optDouble("tempo", 120.0).toFloat())
                 ),

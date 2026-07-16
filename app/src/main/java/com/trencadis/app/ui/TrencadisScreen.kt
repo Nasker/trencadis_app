@@ -31,7 +31,8 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.trencadis.app.TrencadisViewModel
 import com.trencadis.app.camera.CameraPixelAnalyzer
-import com.trencadis.app.ui.components.KeysPanel
+import com.trencadis.app.camera.PixelSelectionMode
+import com.trencadis.app.ui.components.RhythmPanel
 import com.trencadis.app.ui.components.ModesPanel
 import com.trencadis.app.ui.components.PalettePanel
 import com.trencadis.app.ui.components.ScalesPanel
@@ -114,6 +115,14 @@ fun TrencadisScreen(
     // Hide/show icons with two-finger tap
     var iconsVisible by remember { mutableStateOf(true) }
 
+    // In pointer mode the play surface owns touch, so keep icons visible for panel access
+    // and disable icon-toggling via the canvas double-tap.
+    LaunchedEffect(state.selectionMode) {
+        if (state.selectionMode == PixelSelectionMode.POINTER) {
+            iconsVisible = true
+        }
+    }
+
     // Stable reference to the live camera analyzer, used to trigger still capture
     // from the capture button without threading state through the camera composable.
     val analyzerRef = remember { AtomicReference<CameraPixelAnalyzer?>(null) }
@@ -159,54 +168,61 @@ fun TrencadisScreen(
                     viewModel.setTouch(x, y, isTouching, canvasWidth, canvasHeight)
                 },
                 onDoubleTap = { x, y, width, height ->
-                    // Check if any panel is open
-                    val anyPanelOpen = state.showModesPanel || state.showScalesPanel || 
-                                       state.showKeysPanel || state.showSynthPanel || 
-                                       state.showPalettePanel || state.showPresetPanel
-                    
-                    if (anyPanelOpen) {
-                        // Check if tap is outside all panel areas
-                        val inModesArea = x < width * 0.35f && y < height * 0.5f
-                        val inScalesArea = y < height * 0.15f
-                        val inKeysArea = y > height * 0.7f && x > width * 0.1f && x < width * 0.9f
-                        val inSynthArea = x > width * 0.65f && y < height * 0.6f
-                        val inPaletteArea = x < width * 0.35f && y > height * 0.4f
-                        val inPresetArea = x > width * 0.65f && y > height * 0.5f
-                        
-                        val inAnyPanelArea = (state.showModesPanel && inModesArea) ||
-                                             (state.showScalesPanel && inScalesArea) ||
-                                             (state.showKeysPanel && inKeysArea) ||
-                                             (state.showSynthPanel && inSynthArea) ||
-                                             (state.showPalettePanel && inPaletteArea) ||
-                                             (state.showPresetPanel && inPresetArea)
-                        
-                        if (!inAnyPanelArea) {
-                            // Close all panels when double-tapping outside
-                            viewModel.setModesPanel(false)
-                            viewModel.setScalesPanel(false)
-                            viewModel.setKeysPanel(false)
-                            viewModel.setSynthPanel(false)
-                            viewModel.setPalettePanel(false)
-                            viewModel.setPresetPanel(false)
+                    // In pointer mode the canvas is a play surface; don't treat touches as
+                    // panel-management gestures.
+                    if (state.selectionMode != PixelSelectionMode.POINTER) {
+                        // Check if any panel is open
+                        val anyPanelOpen = state.showModesPanel || state.showScalesPanel ||
+                                           state.showKeysPanel || state.showSynthPanel ||
+                                           state.showPalettePanel || state.showPresetPanel
+
+                        if (anyPanelOpen) {
+                            // Check if tap is outside all panel areas
+                            val inModesArea = x < width * 0.35f && y < height * 0.5f
+                            val inScalesArea = y < height * 0.35f
+                            val inKeysArea = y > height * 0.7f && x > width * 0.1f && x < width * 0.9f
+                            val inSynthArea = x > width * 0.65f && y < height * 0.6f
+                            val inPaletteArea = x < width * 0.35f && y > height * 0.4f
+                            val inPresetArea = x > width * 0.65f && y > height * 0.5f
+
+                            val inAnyPanelArea = (state.showModesPanel && inModesArea) ||
+                                                 (state.showScalesPanel && inScalesArea) ||
+                                                 (state.showKeysPanel && inKeysArea) ||
+                                                 (state.showSynthPanel && inSynthArea) ||
+                                                 (state.showPalettePanel && inPaletteArea) ||
+                                                 (state.showPresetPanel && inPresetArea)
+
+                            if (!inAnyPanelArea) {
+                                // Close all panels when double-tapping outside
+                                viewModel.setModesPanel(false)
+                                viewModel.setScalesPanel(false)
+                                viewModel.setKeysPanel(false)
+                                viewModel.setSynthPanel(false)
+                                viewModel.setPalettePanel(false)
+                                viewModel.setPresetPanel(false)
+                            }
+                        } else {
+                            // No panel open - toggle icons visibility
+                            iconsVisible = !iconsVisible
                         }
-                    } else {
-                        // No panel open - toggle icons visibility
-                        iconsVisible = !iconsVisible
                     }
                 },
                 onEdgeDrag = { x, y, width, height ->
-                    // Left edge - modes panel (upper quarter)
-                    viewModel.setModesPanel(x < width * 0.05f && y < height * 0.35f)
-                    // Left edge middle/lower - palette panel (blob + acid unified)
-                    viewModel.setPalettePanel(x < width * 0.1f && y >= height * 0.5f && y < height * 0.9f)
-                    // Top edge - scales panel
-                    viewModel.setScalesPanel(y < height * 0.05f)
-                    // Bottom edge - keys panel
-                    viewModel.setKeysPanel(y > height * 0.95f && x > width * 0.2f)
-                    // Right edge upper - synth panel (upper half)
-                    viewModel.setSynthPanel(x > width * 0.95f && y < height * 0.5f)
-                    // Right edge lower - preset panel (around 3/4 height)
-                    viewModel.setPresetPanel(x > width * 0.9f && y > height * 0.6f && y < height * 0.9f)
+                    // Pointer mode and sequence mode own the canvas surface; don't open panels from drags.
+                    if (state.selectionMode != PixelSelectionMode.POINTER && state.selectionMode != PixelSelectionMode.SEQUENCE) {
+                        // Left edge - modes panel (upper quarter)
+                        viewModel.setModesPanel(x < width * 0.05f && y < height * 0.35f)
+                        // Left edge middle/lower - palette panel (blob + acid unified)
+                        viewModel.setPalettePanel(x < width * 0.1f && y >= height * 0.5f && y < height * 0.9f)
+                        // Top edge - scales panel (sticky)
+                        if (y < height * 0.05f) viewModel.setScalesPanel(true)
+                        // Bottom edge - keys/rhythm panel (sticky)
+                        if (y > height * 0.95f && x > width * 0.2f) viewModel.setKeysPanel(true)
+                        // Right edge upper - synth panel (upper half)
+                        viewModel.setSynthPanel(x > width * 0.95f && y < height * 0.5f)
+                        // Right edge lower - preset panel (around 3/4 height)
+                        viewModel.setPresetPanel(x > width * 0.9f && y > height * 0.6f && y < height * 0.9f)
+                    }
                 }
             )
             
@@ -244,7 +260,7 @@ fun TrencadisScreen(
                 )
             }
             
-            // Scales Panel (Top edge)
+            // Scales Panel (Top edge): scale + root key + future chord selector
             AnimatedVisibility(
                 visible = state.showScalesPanel,
                 enter = slideInVertically(initialOffsetY = { -it }),
@@ -253,23 +269,26 @@ fun TrencadisScreen(
             ) {
                 ScalesPanel(
                     currentScale = state.musicState.scaleIndex,
-                    onScaleSelected = { viewModel.setScale(it) }
+                    currentKey = state.musicState.keyIndex,
+                    currentChordType = state.musicState.chordTypeIndex,
+                    useChordMapping = state.musicState.useChordMapping,
+                    onScaleSelected = { viewModel.setScale(it) },
+                    onKeySelected = { viewModel.setKey(it) },
+                    onChordTypeSelected = { viewModel.setChordType(it) }
                 )
             }
-            
-            // Keys Panel (Bottom edge)
+
+            // Rhythm Panel (Bottom edge): XY pad for figure/octave + tap tempo
             AnimatedVisibility(
                 visible = state.showKeysPanel,
                 enter = slideInVertically(initialOffsetY = { it }),
                 exit = slideOutVertically(targetOffsetY = { it }),
                 modifier = Modifier.align(Alignment.BottomCenter)
             ) {
-                KeysPanel(
-                    currentKey = state.musicState.keyIndex,
+                RhythmPanel(
                     currentOctave = state.musicState.octaveIndex,
                     currentFigure = state.musicState.figureIndex,
                     tempo = state.musicState.tempo,
-                    onKeySelected = { viewModel.setKey(it) },
                     onOctaveSelected = { viewModel.setOctave(it) },
                     onFigureSelected = { viewModel.setFigure(it) },
                     onTapTempo = {
@@ -350,12 +369,14 @@ fun TrencadisScreen(
                 )
             }
 
-            // Touch hint indicators at edges - hide all icons when any panel is open
+            // Touch hint indicators at edges. Side buttons hide whenever any panel is
+            // open to avoid cluttering the middle. Top/bottom buttons hide only when
+            // their own panel is open so the scales and rhythm panels can be toggled
+            // together.
             val anyPanelOpen = state.showModesPanel || state.showScalesPanel || 
-                               state.showKeysPanel || state.showSynthPanel || state.showPalettePanel ||
-                               state.showPresetPanel
-            
-            if (iconsVisible && !anyPanelOpen) {
+                               state.showKeysPanel || state.showSynthPanel || 
+                               state.showPalettePanel || state.showPresetPanel
+            if (iconsVisible) {
                 EdgeHints(
                     midiState = state.midiState,
                     onModesClick = { viewModel.setModesPanel(true) },
@@ -363,7 +384,13 @@ fun TrencadisScreen(
                     onKeysClick = { viewModel.setKeysPanel(true) },
                     onSynthClick = { viewModel.setSynthPanel(true) },
                     onPaletteClick = { viewModel.setPalettePanel(true) },
-                    onPresetClick = { viewModel.setPresetPanel(true) }
+                    onPresetClick = { viewModel.setPresetPanel(true) },
+                    showModes = !state.showModesPanel && !anyPanelOpen,
+                    showScales = !state.showScalesPanel,
+                    showKeys = !state.showKeysPanel,
+                    showSynth = !state.showSynthPanel && !anyPanelOpen,
+                    showPalette = !state.showPalettePanel && !anyPanelOpen,
+                    showPreset = !state.showPresetPanel && !anyPanelOpen
                 )
             }
             

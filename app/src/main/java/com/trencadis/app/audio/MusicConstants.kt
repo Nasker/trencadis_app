@@ -1,5 +1,7 @@
 package com.trencadis.app.audio
 
+import kotlin.math.pow
+
 object MusicConstants {
     
     val SCALE_NAMES = listOf(
@@ -16,6 +18,41 @@ object MusicConstants {
     val FIGURE_NAMES = listOf(
         "Redonda", "Blanca", "Negra", "Corchea", "SemiCorchea", "Fusa", "SemiFusa"
     )
+    
+    val FIGURE_SYMBOLS = listOf("𝅝", "𝅗𝅥", "♩", "♪", "𝅘𝅥𝅯", "𝅘𝅥𝅰", "𝅘𝅥𝅱")
+    
+    val CHORD_TYPE_SHORT_NAMES = listOf(
+        "Maj", "min", "dim", "aug", "M7", "m7", "7", "sus2", "sus4", "pwr"
+    )
+    
+    // Semitone offsets for each chord type above, used for mapping hue to pitch.
+    val CHORD_INTERVALS = listOf(
+        listOf(0, 4, 7),        // Major
+        listOf(0, 3, 7),        // minor
+        listOf(0, 3, 6),        // diminished
+        listOf(0, 4, 8),        // augmented
+        listOf(0, 4, 7, 11),    // major 7th
+        listOf(0, 3, 7, 10),    // minor 7th
+        listOf(0, 4, 7, 10),    // dominant 7th
+        listOf(0, 2, 7),        // sus2
+        listOf(0, 5, 7),        // sus4
+        listOf(0, 7)            // power
+    )
+
+    // Frequency ratios for each chord type, unfolded across two octaves so hue
+    // can select a chord grade the same way scales select scale degrees.
+    val CHORD_STEPS = CHORD_INTERVALS.map { intervals ->
+        val ratios = mutableListOf<Float>()
+        for (octave in 0 until 2) {
+            for (interval in intervals) {
+                ratios.add(2f.pow((octave * 12 + interval) / 12f))
+            }
+        }
+        ratios.add(2f.pow(24f / 12f)) // top root at 2 octaves
+        ratios.toFloatArray()
+    }.toTypedArray()
+
+    val CHORD_NOTE_COUNT = CHORD_STEPS.map { it.size - 1 }.toIntArray()
     
     // Diatonic scale step ratios for each scale
     // Each row represents a scale, columns are the chromatic steps mapped to diatonic
@@ -56,14 +93,27 @@ object MusicConstants {
         return 440f * Math.pow(2.0, (-45.0 + keyIndex) / 12.0).toFloat()
     }
     
-    // Calculate note frequency from hue, scale, key, and octave
+    // Calculate note frequency from hue, scale/key, and octave.
+    // When useChordMapping is true, hue maps to a chord grade across two octaves;
+    // otherwise it maps to a scale degree as before.
     fun calculateFrequency(
         hue: Float,        // 0-360
         scaleIndex: Int,
         keyIndex: Int,
-        octaveIndex: Int
+        octaveIndex: Int,
+        chordTypeIndex: Int = 0,
+        useChordMapping: Boolean = false
     ): Float {
         val rootFreq = getRootFrequency(keyIndex)
+
+        if (useChordMapping && chordTypeIndex in CHORD_STEPS.indices) {
+            val chordSteps = CHORD_STEPS[chordTypeIndex]
+            val nNotes = CHORD_NOTE_COUNT[chordTypeIndex]
+            val chromStep = Math.round((hue / 360f) * nNotes).coerceIn(0, chordSteps.size - 1)
+            val stepRatio = chordSteps[chromStep]
+            return OCTAVE_MULTIPLIERS[octaveIndex] * rootFreq * stepRatio
+        }
+
         val nNotes = NOTES_PER_SCALE[scaleIndex]
         val scaleSteps = DIATONIC_STEPS[scaleIndex]
         // Round like the original (chromStep can reach nNotes, the top note of

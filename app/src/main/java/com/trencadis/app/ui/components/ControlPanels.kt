@@ -3,6 +3,8 @@ package com.trencadis.app.ui.components
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -13,7 +15,14 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.positionChanged
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -217,7 +226,12 @@ private fun ModeButton(
 @Composable
 fun ScalesPanel(
     currentScale: Int,
+    currentKey: Int,
+    currentChordType: Int,
+    useChordMapping: Boolean = false,
     onScaleSelected: (Int) -> Unit,
+    onKeySelected: (Int) -> Unit,
+    onChordTypeSelected: (Int) -> Unit,
     modifier: Modifier = Modifier
 ) {
     Column(
@@ -233,7 +247,7 @@ fun ScalesPanel(
             fontWeight = FontWeight.Bold,
             modifier = Modifier.padding(bottom = 8.dp)
         )
-        
+
         Row(
             horizontalArrangement = Arrangement.spacedBy(4.dp),
             modifier = Modifier.horizontalScroll(rememberScrollState())
@@ -242,56 +256,14 @@ fun ScalesPanel(
                 ScaleButton(
                     label = name.take(4),
                     isSelected = currentScale == index,
+                    isActiveRow = !useChordMapping,
                     onClick = { onScaleSelected(index) }
                 )
             }
         }
-    }
-}
 
-@Composable
-private fun ScaleButton(
-    label: String,
-    isSelected: Boolean,
-    onClick: () -> Unit
-) {
-    Box(
-        modifier = Modifier
-            .width(50.dp)
-            .height(40.dp)
-            .clip(RoundedCornerShape(4.dp))
-            .background(if (isSelected) Color(0xFF2196F3) else Color(0xFF424242))
-            .clickable(onClick = onClick),
-        contentAlignment = Alignment.Center
-    ) {
-        Text(
-            text = label,
-            color = Color.White,
-            fontSize = 10.sp,
-            textAlign = TextAlign.Center
-        )
-    }
-}
+        Spacer(modifier = Modifier.height(8.dp))
 
-@Composable
-fun KeysPanel(
-    currentKey: Int,
-    currentOctave: Int,
-    currentFigure: Int,
-    tempo: Float,
-    onKeySelected: (Int) -> Unit,
-    onOctaveSelected: (Int) -> Unit,
-    onFigureSelected: (Int) -> Unit,
-    onTapTempo: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    Column(
-        modifier = modifier
-            .clip(RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp))
-            .background(Color(0xAA7A7A7A))
-            .padding(12.dp)
-    ) {
-        // Keys row (piano-like)
         Text(
             text = "KEY",
             color = Color.White,
@@ -299,8 +271,8 @@ fun KeysPanel(
             fontWeight = FontWeight.Bold,
             modifier = Modifier.padding(bottom = 4.dp)
         )
-        
-        androidx.compose.foundation.layout.Row(
+
+        Row(
             horizontalArrangement = Arrangement.spacedBy(2.dp),
             modifier = Modifier.fillMaxWidth()
         ) {
@@ -315,64 +287,240 @@ fun KeysPanel(
                 )
             }
         }
-        
-        Spacer(modifier = Modifier.height(12.dp))
-        
-        // Octave row
+
+        Spacer(modifier = Modifier.height(8.dp))
+
         Text(
-            text = "OCTAVE",
+            text = "CHORD",
             color = Color.White,
             fontSize = 12.sp,
             fontWeight = FontWeight.Bold,
             modifier = Modifier.padding(bottom = 4.dp)
         )
-        
-        androidx.compose.foundation.layout.Row(
-            horizontalArrangement = Arrangement.spacedBy(4.dp)
+
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+            modifier = Modifier.horizontalScroll(rememberScrollState())
         ) {
-            (0..6).forEach { index ->
-                OctaveButton(
-                    label = "x${index + 1}",
-                    isSelected = currentOctave == index,
-                    onClick = { onOctaveSelected(index) }
+            MusicConstants.CHORD_TYPE_SHORT_NAMES.forEachIndexed { index, name ->
+                ScaleButton(
+                    label = name,
+                    isSelected = currentChordType == index,
+                    isActiveRow = useChordMapping,
+                    onClick = { onChordTypeSelected(index) }
                 )
             }
         }
-        
-        Spacer(modifier = Modifier.height(12.dp))
-        
-        // Figure/Note duration row
+    }
+}
+
+@Composable
+private fun ScaleButton(
+    label: String,
+    isSelected: Boolean,
+    isActiveRow: Boolean = true,
+    onClick: () -> Unit
+) {
+    val bg = when {
+        isSelected && isActiveRow -> Color(0xFF2196F3)
+        isSelected -> Color(0xFF616161)
+        else -> Color(0xFF424242)
+    }
+    Box(
+        modifier = Modifier
+            .width(50.dp)
+            .height(40.dp)
+            .clip(RoundedCornerShape(4.dp))
+            .background(bg)
+            .clickable(onClick = onClick),
+        contentAlignment = Alignment.Center
+    ) {
         Text(
-            text = "FIGURE",
+            text = label,
+            color = Color.White,
+            fontSize = 10.sp,
+            textAlign = TextAlign.Center
+        )
+    }
+}
+
+@Composable
+fun RhythmPanel(
+    currentOctave: Int,
+    currentFigure: Int,
+    tempo: Float,
+    onOctaveSelected: (Int) -> Unit,
+    onFigureSelected: (Int) -> Unit,
+    onTapTempo: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val figureSymbols = MusicConstants.FIGURE_SYMBOLS
+    val octaveCount = MusicConstants.OCTAVE_MULTIPLIERS.size
+    val figureCount = figureSymbols.size
+    val insetPx = with(LocalDensity.current) { 4.dp.toPx() }
+
+    fun updateFromOffset(offset: Offset, size: Size) {
+        val drawW = size.width - 2 * insetPx
+        val drawH = size.height - 2 * insetPx
+        val x = (offset.x - insetPx).coerceIn(0f, drawW)
+        val y = (offset.y - insetPx).coerceIn(0f, drawH)
+        val figure = (x / drawW * figureCount).toInt().coerceIn(0, figureCount - 1)
+        val octave = ((1f - y / drawH) * octaveCount).toInt().coerceIn(0, octaveCount - 1)
+        onFigureSelected(figure)
+        onOctaveSelected(octave)
+    }
+
+    Column(
+        modifier = modifier
+            .clip(RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp))
+            .background(Color(0xAA7A7A7A))
+            .padding(12.dp)
+    ) {
+        Text(
+            text = "RHYTHM",
             color = Color.White,
             fontSize = 12.sp,
             fontWeight = FontWeight.Bold,
-            modifier = Modifier.padding(bottom = 4.dp)
+            modifier = Modifier.padding(bottom = 8.dp)
         )
-        
-        androidx.compose.foundation.layout.Row(
-            horizontalArrangement = Arrangement.spacedBy(4.dp)
+
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.fillMaxWidth()
         ) {
-            val figureSymbols = listOf("𝅝", "𝅗𝅥", "♩", "♪", "𝅘𝅥𝅯", "𝅘𝅥𝅰", "𝅘𝅥𝅱")
-            figureSymbols.forEachIndexed { index, symbol ->
-                FigureButton(
-                    label = symbol,
-                    isSelected = currentFigure == index,
-                    onClick = { onFigureSelected(index) }
-                )
+            // Y axis: octave labels (x1 at the bottom, x7 at the top)
+            Column(
+                modifier = Modifier
+                    .width(24.dp)
+                    .height(160.dp),
+                verticalArrangement = Arrangement.SpaceEvenly,
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                for (i in octaveCount - 1 downTo 0) {
+                    Text(
+                        text = "x${i + 1}",
+                        color = if (currentOctave == i) Color(0xFFFF9800) else Color.White,
+                        fontSize = 10.sp,
+                        fontWeight = if (currentOctave == i) FontWeight.Bold else FontWeight.Normal
+                    )
+                }
             }
-            
-            Spacer(modifier = Modifier.weight(1f))
-            
-            // Tap tempo button
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+
+            Spacer(modifier = Modifier.width(8.dp))
+
+            Column(
+                modifier = Modifier.weight(1f)
+            ) {
+                // XY pad: X = figure, Y = octave
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(160.dp)
+                        .background(Color(0xFF1A1A1A), RoundedCornerShape(16.dp))
+                        .pointerInput(Unit) {
+                            awaitEachGesture {
+                                val down = awaitFirstDown()
+                                down.consume()
+                                updateFromOffset(
+                                    down.position,
+                                    Size(size.width.toFloat(), size.height.toFloat())
+                                )
+                                do {
+                                    val event = awaitPointerEvent()
+                                    val change = event.changes.firstOrNull { it.id == down.id }
+                                    if (change != null && change.positionChanged()) {
+                                        change.consume()
+                                        updateFromOffset(
+                                            change.position,
+                                            Size(
+                                                size.width.toFloat(),
+                                                size.height.toFloat()
+                                            )
+                                        )
+                                    }
+                                    if (change != null && !change.pressed) break
+                                } while (true)
+                            }
+                        }
+                        .drawBehind {
+                            val cols = figureCount
+                            val rows = octaveCount
+                            val inset = 4.dp.toPx()
+                            val drawW = size.width - 2 * inset
+                            val drawH = size.height - 2 * inset
+                            val cellW = drawW / cols
+                            val cellH = drawH / rows
+                            val gap = 2.dp.toPx()
+
+                            for (r in 0 until rows) {
+                                for (c in 0 until cols) {
+                                    val isSelected = (rows - 1 - r) == currentOctave && c == currentFigure
+                                    val baseColor = if ((r + c) % 2 == 0) Color(0xFF9A9A9A).copy(alpha = 0.5f) else Color(0xFF8E8E8E).copy(alpha = 0.5f)
+                                    val topLeft = Offset(inset + c * cellW + gap, inset + r * cellH + gap)
+                                    val cellSize = Size(cellW - 2 * gap, cellH - 2 * gap)
+
+                                    drawRect(
+                                        color = if (isSelected) Color(0xFFFF9800).copy(alpha = 0.45f) else baseColor,
+                                        topLeft = topLeft,
+                                        size = cellSize
+                                    )
+
+                                    if (isSelected) {
+                                        drawRect(
+                                            color = Color(0xFFFF9800),
+                                            topLeft = topLeft,
+                                            size = cellSize,
+                                            style = Stroke(width = 2f)
+                                        )
+                                    }
+                                }
+                            }
+
+                            // selection dot
+                            val selR = rows - 1 - currentOctave
+                            val selX = inset + currentFigure * cellW + cellW / 2f
+                            val selY = inset + selR * cellH + cellH / 2f
+                            drawCircle(
+                                color = Color(0xFFFF9800),
+                                radius = minOf(cellW, cellH) * 0.18f,
+                                center = Offset(selX, selY)
+                            )
+                        }
+                        .clip(RoundedCornerShape(16.dp))
+                )
+
+                // X axis: figure symbols
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceEvenly
+                ) {
+                    figureSymbols.forEachIndexed { index, symbol ->
+                        Text(
+                            text = symbol,
+                            color = if (currentFigure == index) Color(0xFFE91E63) else Color.White,
+                            fontSize = 18.sp,
+                            fontWeight = if (currentFigure == index) FontWeight.Bold else FontWeight.Normal
+                        )
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.width(8.dp))
+
+            // Tap tempo
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center,
+                modifier = Modifier.height(160.dp)
+            ) {
                 Button(
                     onClick = onTapTempo,
                     colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF673AB7)),
-                    modifier = Modifier.size(60.dp, 40.dp)
+                    modifier = Modifier.size(60.dp, 48.dp)
                 ) {
                     Text("TAP", fontSize = 10.sp)
                 }
+                Spacer(modifier = Modifier.height(4.dp))
                 Text(
                     text = "${tempo.toInt()} BPM",
                     color = Color.Cyan,
@@ -393,7 +541,7 @@ private fun KeyButton(
 ) {
     Box(
         modifier = modifier
-            .height(if (isBlackKey) 50.dp else 70.dp)
+            .height(if (isBlackKey) 32.dp else 45.dp)
             .clip(RoundedCornerShape(bottomStart = 4.dp, bottomEnd = 4.dp))
             .background(
                 when {
@@ -411,50 +559,6 @@ private fun KeyButton(
             color = if (isBlackKey && !isSelected) Color.White else Color.Black,
             fontSize = 10.sp,
             modifier = Modifier.padding(bottom = 4.dp)
-        )
-    }
-}
-
-@Composable
-private fun OctaveButton(
-    label: String,
-    isSelected: Boolean,
-    onClick: () -> Unit
-) {
-    Box(
-        modifier = Modifier
-            .size(40.dp, 30.dp)
-            .clip(RoundedCornerShape(4.dp))
-            .background(if (isSelected) Color(0xFFFF9800) else Color(0xFF424242))
-            .clickable(onClick = onClick),
-        contentAlignment = Alignment.Center
-    ) {
-        Text(
-            text = label,
-            color = Color.White,
-            fontSize = 12.sp
-        )
-    }
-}
-
-@Composable
-private fun FigureButton(
-    label: String,
-    isSelected: Boolean,
-    onClick: () -> Unit
-) {
-    Box(
-        modifier = Modifier
-            .size(35.dp)
-            .clip(RoundedCornerShape(4.dp))
-            .background(if (isSelected) Color(0xFFE91E63) else Color(0xFF424242))
-            .clickable(onClick = onClick),
-        contentAlignment = Alignment.Center
-    ) {
-        Text(
-            text = label,
-            color = Color.White,
-            fontSize = 16.sp
         )
     }
 }

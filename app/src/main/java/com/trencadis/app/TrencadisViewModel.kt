@@ -61,6 +61,8 @@ data class MusicState(
     val keyIndex: Int = 0,    // C
     val octaveIndex: Int = 2, // x3
     val figureIndex: Int = 2, // Negra
+    val chordTypeIndex: Int = 0, // Major
+    val useChordMapping: Boolean = false, // true when chord was selected last, false when scale was selected last
     val tempo: Float = 120f,  // BPM
     val periodTempo: Float = 500f  // ms between notes
 )
@@ -111,6 +113,11 @@ class TrencadisViewModel(application: Application) : AndroidViewModel(applicatio
 
         // Envelope samples kept for the visual ripple (~0.8s at 33ms/sample)
         const val ENVELOPE_TRAIL_SIZE = 24
+
+        // Sequence-mode tap/swipe thresholds (in pixels / ms)
+        const val SEQUENCE_TAP_DISTANCE = 24f
+        const val SEQUENCE_TAP_TIMEOUT = 250L
+        const val SEQUENCE_SWIPE_DISTANCE = 48f
     }
 
     private val _state = MutableStateFlow(TrencadisState())
@@ -135,6 +142,12 @@ class TrencadisViewModel(application: Application) : AndroidViewModel(applicatio
     
     private var lastIp = 0f
     private var lastJp = 0f
+
+    // Gesture tracking for sequence-mode tap/swipe control
+    private var seqTouchStartX = 0f
+    private var seqTouchStartY = 0f
+    private var seqTouchStartTime = 0L
+    private var seqSwipeFired = false
 
     // External MIDI clock phase (24 ticks per quarter note). Written from the
     // MIDI delivery thread, reset from Start messages and lock transitions.
@@ -214,6 +227,7 @@ class TrencadisViewModel(application: Application) : AndroidViewModel(applicatio
             if (success) {
                 applySynthState(_state.value.synthState)
                 applyMusicState(_state.value.musicState)
+                applySequencerState()
             }
         }
     }
@@ -262,31 +276,33 @@ class TrencadisViewModel(application: Application) : AndroidViewModel(applicatio
         val state = _state.value
         val musicState = state.musicState
         val synthState = state.synthState
-        
-        // Calculate frequency from hue
+
+        // Calculate frequency from hue, mapping to the selected scale degrees or chord grades
         val freq = MusicConstants.calculateFrequency(
             hue = pixel.hue,
             scaleIndex = musicState.scaleIndex,
             keyIndex = musicState.keyIndex,
-            octaveIndex = musicState.octaveIndex
+            octaveIndex = musicState.octaveIndex,
+            chordTypeIndex = musicState.chordTypeIndex,
+            useChordMapping = musicState.useChordMapping
         )
-        
+
         // Calculate spatial position for panning (-20 to 20 like original)
         val spaceSize = 40f
         val grid = state.pixelGrid ?: return
         val ip = (pixel.gridX.toFloat() / grid.cols) * spaceSize - spaceSize / 2
         val jp = (pixel.gridY.toFloat() / grid.rows) * spaceSize - spaceSize / 2
-        
+
         // Calculate filter cutoff with envelope
         val cutoff = freq / 2 + 16000 * synthState.cutoff.pow(4)
         val envDiff = cutoff * 2f.pow(4 * synthState.envelope) - cutoff
-        
+
         pdEngine.setX(ip)
         pdEngine.setY(jp + 0.1f)
         pdEngine.setFrequency(freq)
         val pdActive = _state.value.midiState.outputMode != MidiOutputMode.MIDI_OUT
         pdEngine.setGain(if (pdActive) pixel.brightness * 0.5f else 0f)
-        
+
         pdEngine.setCutoff(cutoff)
         pdEngine.setResonance(1 + 100 * synthState.resonance.pow(3))
         pdEngine.setEnvelope(envDiff)
@@ -299,15 +315,15 @@ class TrencadisViewModel(application: Application) : AndroidViewModel(applicatio
         pdEngine.setChorusMod(100 * synthState.chorusMod.pow(3))
         pdEngine.setFeedback(2.5f * synthState.feedback)
         pdEngine.setReverbSend(synthState.feedback / 5)
-        
+
         pdEngine.setDelayTime(musicState.periodTempo / 2f.pow(synthState.delayFigure.roundToInt().toFloat()))
         pdEngine.setSequencerPeriod(musicState.periodTempo / 2f.pow((musicState.figureIndex - 2).toFloat()))
-        
+
         val rootFreq = MusicConstants.getRootFrequency(musicState.keyIndex)
         pdEngine.setBPDFreq(rootFreq * 32)
-        
+
         // In pointer mode, trigger on position change
-        if (state.selectionMode == PixelSelectionMode.POINTER && 
+        if (state.selectionMode == PixelSelectionMode.POINTER &&
             state.isTouching && (jp != lastJp || ip != lastIp)) {
             pdEngine.triggerBang()
             lastJp = jp
@@ -370,8 +386,8 @@ class TrencadisViewModel(application: Application) : AndroidViewModel(applicatio
         if (state.midiState.enabled && state.midiState.outputMode != MidiOutputMode.INTERNAL) {
             state.selectedPixel?.let { pixel ->
                 val music = state.musicState
-                val freq = com.trencadis.app.audio.MusicConstants.calculateFrequency(
-                    pixel.hue, music.scaleIndex, music.keyIndex, music.octaveIndex
+                val freq = MusicConstants.calculateFrequency(
+                    pixel.hue, music.scaleIndex, music.keyIndex, music.octaveIndex, music.chordTypeIndex, music.useChordMapping
                 )
                 val pitch = freqToMidiPitch(freq)
                 val velocity = (pixel.brightness * 127).toInt().coerceIn(1, 127)
@@ -432,50 +448,149 @@ class TrencadisViewModel(application: Application) : AndroidViewModel(applicatio
     
     fun setTouch(x: Float, y: Float, isTouching: Boolean, canvasWidth: Float = 0f, canvasHeight: Float = 0f) {
         val prevState = _state.value
-        _state.update { 
+        _state.update {
             it.copy(
-                touchX = x, 
-                touchY = y, 
+                touchX = x,
+                touchY = y,
                 isTouching = isTouching,
                 canvasWidth = if (canvasWidth > 0f) canvasWidth else it.canvasWidth,
                 canvasHeight = if (canvasHeight > 0f) canvasHeight else it.canvasHeight
-            ) 
+            )
         }
-        
-        if (_state.value.selectionMode == PixelSelectionMode.POINTER) {
-            pdEngine.setNoteOn(isTouching)
 
-            // Finger lifted: release the sounding MIDI note. Pd has its own
-            // NoteOn gate, but external destinations only ever saw note-ons.
-            if (!isTouching && prevState.isTouching) {
-                noteRouter.allNotesOff(_state.value.midiState.channel)
-            }
+        when (_state.value.selectionMode) {
+            PixelSelectionMode.POINTER -> {
+                pdEngine.setNoteOn(isTouching)
 
-            // Trigger on press or when position changes while touching
-            if (isTouching) {
-                val grid = _state.value.pixelGrid
-                if (grid != null) {
-                    val newState = _state.value
-                    val prevPixel = if (prevState.isTouching) {
-                        grid.getAtPosition(prevState.touchX, prevState.touchY, prevState.canvasWidth, prevState.canvasHeight)
-                    } else null
-                    val newPixel = grid.getAtPosition(x, y, newState.canvasWidth, newState.canvasHeight)
-                    
-                    // Trigger if just started touching OR pixel changed
-                    if (!prevState.isTouching || (prevPixel?.gridX != newPixel?.gridX || prevPixel?.gridY != newPixel?.gridY)) {
-                        newPixel?.let { sendPixelToAudio(it) }
+                // Finger lifted: release the sounding MIDI note. Pd has its own
+                // NoteOn gate, but external destinations only ever saw note-ons.
+                if (!isTouching && prevState.isTouching) {
+                    noteRouter.allNotesOff(_state.value.midiState.channel)
+                }
+
+                // Trigger on press or when position changes while touching
+                if (isTouching) {
+                    val grid = _state.value.pixelGrid
+                    if (grid != null) {
+                        val newState = _state.value
+                        val prevPixel = if (prevState.isTouching) {
+                            grid.getAtPosition(prevState.touchX, prevState.touchY, prevState.canvasWidth, prevState.canvasHeight)
+                        } else null
+                        val newPixel = grid.getAtPosition(x, y, newState.canvasWidth, newState.canvasHeight)
+
+                        // Trigger if just started touching OR pixel changed
+                        if (!prevState.isTouching || (prevPixel?.gridX != newPixel?.gridX || prevPixel?.gridY != newPixel?.gridY)) {
+                            newPixel?.let { sendPixelToAudio(it) }
+                            pdEngine.triggerBang()
+                        }
+                    } else {
                         pdEngine.triggerBang()
                     }
-                } else {
-                    pdEngine.triggerBang()
+                }
+            }
+            PixelSelectionMode.SEQUENCE -> {
+                handleSequenceTouch(prevState, x, y, isTouching, canvasWidth, canvasHeight)
+            }
+            else -> { /* Center / brightest are not interactive through the canvas */ }
+        }
+    }
+
+    private fun handleSequenceTouch(
+        prevState: TrencadisState,
+        x: Float,
+        y: Float,
+        isTouching: Boolean,
+        canvasWidth: Float,
+        canvasHeight: Float
+    ) {
+        if (!prevState.isTouching && isTouching) {
+            // Touch-down: remember where the gesture started and when.
+            seqTouchStartX = x
+            seqTouchStartY = y
+            seqTouchStartTime = System.currentTimeMillis()
+            seqSwipeFired = false
+            return
+        }
+
+        if (prevState.isTouching && !isTouching) {
+            // Touch-up: decide whether it was a tap or a swipe.
+            val dx = x - seqTouchStartX
+            val dy = y - seqTouchStartY
+            val distance = kotlin.math.hypot(dx, dy)
+            val duration = System.currentTimeMillis() - seqTouchStartTime
+            val grid = _state.value.pixelGrid ?: return
+            val width = if (canvasWidth > 0f) canvasWidth else _state.value.canvasWidth
+            val height = if (canvasHeight > 0f) canvasHeight else _state.value.canvasHeight
+
+            when {
+                distance < SEQUENCE_TAP_DISTANCE && duration < SEQUENCE_TAP_TIMEOUT -> {
+                    // Tap: jump the cursor to the pixel under the finger.
+                    grid.getAtPosition(seqTouchStartX, seqTouchStartY, width, height)
+                        ?.let { setSequenceCursor(grid, it) }
+                }
+                distance >= SEQUENCE_SWIPE_DISTANCE && !seqSwipeFired -> {
+                    // Swipe: move the cursor one cell in the dominant direction.
+                    val (deltaCol, deltaRow) = dominantGridDelta(dx, dy)
+                    moveSequenceCursor(grid, deltaCol, deltaRow)
                 }
             }
         }
     }
-    
+
+    private fun setSequenceCursor(grid: PixelGrid, pixel: PixelData) {
+        val index = grid.pixels.indexOf(pixel)
+        if (index >= 0) {
+            _state.update { it.copy(sequenceIndex = index, selectedPixel = pixel) }
+            playPixel(pixel)
+        }
+    }
+
+    private fun moveSequenceCursor(grid: PixelGrid, deltaCol: Int, deltaRow: Int) {
+        val currentPixel = _state.value.selectedPixel
+            ?: grid.getAtPosition(seqTouchStartX, seqTouchStartY, _state.value.canvasWidth, _state.value.canvasHeight)
+            ?: return
+        val target = grid.getPixelAt(currentPixel.gridX + deltaCol, currentPixel.gridY + deltaRow)
+            ?: return
+        val index = grid.pixels.indexOf(target)
+        if (index >= 0) {
+            _state.update { it.copy(sequenceIndex = index, selectedPixel = target) }
+            playPixel(target)
+        }
+    }
+
+    private fun playPixel(pixel: PixelData) {
+        sendPixelToAudio(pixel)
+        pdEngine.triggerBang()
+
+        // Mirror the note-out logic used by the auto-step sequencer for external destinations.
+        val state = _state.value
+        if (state.midiState.enabled && state.midiState.outputMode != MidiOutputMode.INTERNAL) {
+            val music = state.musicState
+            val freq = MusicConstants.calculateFrequency(
+                pixel.hue,
+                music.scaleIndex,
+                music.keyIndex,
+                music.octaveIndex,
+                music.chordTypeIndex,
+                music.useChordMapping
+            )
+            val pitch = freqToMidiPitch(freq)
+            val velocity = (pixel.brightness * 127).toInt().coerceIn(1, 127)
+            noteRouter.noteOn(pitch, velocity, state.midiState.channel)
+        }
+    }
+
+    private fun dominantGridDelta(dx: Float, dy: Float): Pair<Int, Int> {
+        return if (dx * dx > dy * dy) {
+            Pair(if (dx > 0) 1 else -1, 0)
+        } else {
+            Pair(0, if (dy > 0) 1 else -1)
+        }
+    }
+
     // Music state setters
     fun setScale(index: Int) {
-        _state.update { it.copy(musicState = it.musicState.copy(scaleIndex = index)) }
+        _state.update { it.copy(musicState = it.musicState.copy(scaleIndex = index, useChordMapping = false)) }
     }
     
     fun setKey(index: Int) {
@@ -488,6 +603,10 @@ class TrencadisViewModel(application: Application) : AndroidViewModel(applicatio
     
     fun setFigure(index: Int) {
         _state.update { it.copy(musicState = it.musicState.copy(figureIndex = index)) }
+    }
+
+    fun setChordType(index: Int) {
+        _state.update { it.copy(musicState = it.musicState.copy(chordTypeIndex = index.coerceIn(0, MusicConstants.CHORD_TYPE_SHORT_NAMES.lastIndex), useChordMapping = true)) }
     }
     
     fun setTempo(bpm: Float) {
