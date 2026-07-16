@@ -70,12 +70,11 @@ a:focus-visible,button:focus-visible{outline:2px solid var(--amber);outline-offs
   margin-bottom:1.1rem;
 }
 h1{
-  font-family:var(--display);
-  font-stretch:87.5%;
-  font-weight:700;
+  font-family:"Homenaje",var(--display);
+  font-weight:400;
   font-size:clamp(3.2rem,11vw,6.8rem);
   line-height:.95;
-  letter-spacing:.015em;
+  letter-spacing:.03em;
   text-transform:uppercase;
   text-wrap:balance;
 }
