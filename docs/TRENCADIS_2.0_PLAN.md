@@ -6,10 +6,12 @@
 
 **Core Pillars:**
 1. **Media Capture & Playback** - Raw still/video capture with reinterpretation
-2. **Audio Engine Enhancements** - Vocoder integration and advanced synthesis
-3. **MIDI Polyphony & Multitimbrality** - Multi-voice control and external synth integration
-4. **MIDI Input Arpeggiation** - Chord detection and harmonic coherence with external instruments
-5. **Streamlined Sharing** - Frictionless preset and media exchange
+2. **MIDI Polyphony & Multitimbrality** - Multi-voice control and external synth integration
+3. **MIDI Input Arpeggiation** - Chord detection and harmonic coherence with external instruments
+4. **Streamlined Sharing** - Frictionless preset and media exchange
+5. **Audio Engine Enhancements** - *(Backlog)* Vocoder integration and advanced synthesis
+
+> **Priority update:** The built-in vocoder is moving to the backlog. Power users can already route Trencadís MIDI/audio into their DAW/synth and apply vocoding there, so MIDI improvements (polyphony, multitimbrality, arpeggiation, CC mapping, clock improvements) take priority over an internal vocoder for now.
 
 ---
 

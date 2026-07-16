@@ -14,6 +14,7 @@ Two connection modes planned — **USB MIDI first**, OSC later:
 | **Wired** | USB MIDI | ✅ Implemented |
 | **Wireless (BLE)** | Bluetooth LE MIDI | ✅ Implemented |
 | **Wireless (OSC)** | WiFi + OSC (UDP) | Deferred, interfaces ready |
+| **Custom vocoder** | Microphone modulator + synth carrier | Deferred — power users can vocode in their DAW |
 
 All modes make Trencadís a **slave** to the DAW. Visuals remain purely local.
 
@@ -160,6 +161,7 @@ Implemented as another `ClockSource`. Supersedes OSC beat clock in studio contex
 - **Audio recording** — Capture performance to audio file
 - **Video recording** — Capture canvas + audio to video file
 - **Multi-blob audio** — Each blob region triggers its own note (currently single-pixel selection)
+- **Custom vocoder / mic modulator** — Built-in bandpass vocoder; deferred because power users can already route MIDI/audio into their DAW/synth and vocode there
 
 ---
 

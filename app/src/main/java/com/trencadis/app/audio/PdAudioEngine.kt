@@ -114,7 +114,6 @@ class PdAudioEngine(private val context: Context) {
             "e_chorus.pd",
             "e_dubdel.pd",
             "e_lop2.pd",
-            "e_vocoder.pd",
             "tapedelay.pd",
             "tapedelaysimple.pd",
             "u_bandpass1.pd",
