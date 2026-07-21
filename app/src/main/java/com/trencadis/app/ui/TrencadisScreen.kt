@@ -14,8 +14,14 @@ import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Help
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
+import com.trencadis.app.ui.components.HelpDialog
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -115,6 +121,9 @@ fun TrencadisScreen(
     // Hide/show icons with two-finger tap
     var iconsVisible by remember { mutableStateOf(true) }
 
+    // Show the help introduction dialog
+    var showHelp by remember { mutableStateOf(false) }
+
     // In pointer mode the play surface owns touch, so keep icons visible for panel access
     // and disable icon-toggling via the canvas double-tap.
     LaunchedEffect(state.selectionMode) {
@@ -134,6 +143,10 @@ fun TrencadisScreen(
         isFrameFrozen = false
     }
     
+    if (showHelp) {
+        HelpDialog(onDismiss = { showHelp = false })
+    }
+
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -289,13 +302,19 @@ fun TrencadisScreen(
                     currentOctave = state.musicState.octaveIndex,
                     currentFigure = state.musicState.figureIndex,
                     tempo = state.musicState.tempo,
+                    isPlaying = state.isPlaying,
+                    syncSource = state.midiState.syncSource,
+                    externalClockAvailable = state.midiState.externalClockAvailable,
+                    isClockLocked = state.midiState.isClockLocked,
                     onOctaveSelected = { viewModel.setOctave(it) },
                     onFigureSelected = { viewModel.setFigure(it) },
                     onTapTempo = {
                         val currentTime = System.currentTimeMillis()
                         viewModel.tapTempo(currentTime, lastTapTime)
                         lastTapTime = currentTime
-                    }
+                    },
+                    onTogglePlay = { viewModel.setPlaying(!state.isPlaying) },
+                    onSyncSourceSelected = { viewModel.setSyncSource(it) }
                 )
             }
             
@@ -392,8 +411,28 @@ fun TrencadisScreen(
                     showPalette = !state.showPalettePanel && !anyPanelOpen,
                     showPreset = !state.showPresetPanel && !anyPanelOpen
                 )
+
+                // Help button hides together with the edge icons when the user
+                // double-taps the canvas to keep the main screen clean.
+                IconButton(
+                    onClick = { showHelp = true },
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(top = 8.dp, end = 8.dp)
+                        .size(48.dp)
+                        .background(
+                            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.5f),
+                            shape = androidx.compose.foundation.shape.CircleShape
+                        )
+                ) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.Help,
+                        contentDescription = "Help",
+                        tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.9f)
+                    )
+                }
             }
-            
+
         } else {
             // Permission not granted
             Box(

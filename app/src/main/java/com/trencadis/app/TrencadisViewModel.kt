@@ -28,6 +28,7 @@ import com.trencadis.app.midi.MidiOutputMode
 import com.trencadis.app.midi.MidiState
 import com.trencadis.app.midi.NoteRouter
 import com.trencadis.app.midi.PdNoteDestination
+import com.trencadis.app.midi.SyncSource
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -100,7 +101,8 @@ data class TrencadisState(
     // Recent amp-envelope samples from Pd (~30Hz, newest first). The canvas
     // samples this delayed by grid distance to ripple outward from the note.
     val envelopeTrail: List<Float> = emptyList(),
-    val mediaCaptureState: MediaCaptureState = MediaCaptureState()
+    val mediaCaptureState: MediaCaptureState = MediaCaptureState(),
+    val isPlaying: Boolean = true
 )
 
 class TrencadisViewModel(application: Application) : AndroidViewModel(application) {
@@ -154,6 +156,45 @@ class TrencadisViewModel(application: Application) : AndroidViewModel(applicatio
     @Volatile private var externalTickCount = 0L
     @Volatile private var nextStepAtTick = 0.0
 
+    /**
+     * Recomputes the effective clock lock whenever external clock availability
+     * or the user's sync-source choice changes. The lock only engages when the
+     * user selected EXTERNAL *and* ticks are actually arriving. While locked
+     * the Pd metro is silenced and steps are driven from MIDI ticks; when the
+     * lock drops the internal metro takes over again (except in pointer mode).
+     * Only the metro stops — onSEQ stays on so the bang-triggered envelope
+     * keeps sounding the internal synth on external ticks.
+     */
+    private fun updateClockLock(
+        available: Boolean = _state.value.midiState.externalClockAvailable,
+        source: SyncSource = _state.value.midiState.syncSource
+    ) {
+        val wasLocked = _state.value.midiState.isClockLocked
+        val locked = available && source == SyncSource.EXTERNAL
+        _state.update {
+            it.copy(midiState = it.midiState.copy(
+                externalClockAvailable = available,
+                syncSource = source,
+                isClockLocked = locked
+            ))
+        }
+        if (locked && !wasLocked) {
+            // Fresh lock: align the step boundary to "now" so stale phase from
+            // a previous lock can't cause a catch-up burst of steps.
+            resetExternalClockPhase()
+        }
+        if (!locked && wasLocked) {
+            // Release the note the last externally-clocked step left sounding;
+            // the internal metro will retrigger from here.
+            noteRouter.allNotesOff(_state.value.midiState.channel)
+        }
+        applySequencerState()
+    }
+
+    fun setSyncSource(source: SyncSource) {
+        updateClockLock(source = source)
+    }
+
     init {
         // Read true hardware screen dimensions to get an accurate aspect ratio.
         // Compose's onGloballyPositioned under-reports height (insets not included)
@@ -195,21 +236,8 @@ class TrencadisViewModel(application: Application) : AndroidViewModel(applicatio
         midiClockSource.onTick = { onExternalClockTick() }
         midiClockSource.connect()
         viewModelScope.launch {
-            midiClockSource.isConnected.collect { connected ->
-                _state.update { it.copy(midiState = it.midiState.copy(isClockLocked = connected)) }
-                // While locked to external clock the Pd metro is silenced and
-                // steps are driven from MIDI ticks; on clock loss the internal
-                // metro takes over again (except in manual pointer mode).
-                // Only the metro stops — onSEQ stays on so the bang-triggered
-                // envelope keeps sounding the internal synth on external ticks.
-                if (connected) {
-                    resetExternalClockPhase()
-                } else {
-                    // Release the note the last externally-clocked step left
-                    // sounding; the internal metro will retrigger from here.
-                    noteRouter.allNotesOff(_state.value.midiState.channel)
-                }
-                applySequencerState()
+            midiClockSource.isConnected.collect { available ->
+                updateClockLock(available = available)
             }
         }
         viewModelScope.launch {
@@ -362,13 +390,33 @@ class TrencadisViewModel(application: Application) : AndroidViewModel(applicatio
      * The fractional accumulator keeps 64th notes (1.5 ticks) on average time.
      * The BANG echoes back through the app's "BANG" subscription, so sequence
      * stepping and MIDI note-out follow the exact same path as the internal metro.
+     *
+     * Gated on isClockLocked so external ticks can never drive steps while the
+     * internal metro still owns the transport (that overlap caused the
+     * double-stepping during lock transitions), and on isPlaying so the
+     * transport stop also silences externally clocked steps.
      */
     private fun onExternalClockTick() {
         val state = _state.value
+        if (!state.midiState.isClockLocked) return
+        if (!state.isPlaying) return
         if (state.selectionMode == PixelSelectionMode.POINTER) return
+
+        val ticksPerStep = 96.0 / 2.0.pow(state.musicState.figureIndex)
+
+        // The figure can shrink mid-play (e.g. whole note → 16th), leaving the
+        // next boundary up to a bar away and stalling the sequencer. Pull it in.
+        if (nextStepAtTick - externalTickCount > ticksPerStep) {
+            nextStepAtTick = externalTickCount + ticksPerStep
+        }
+
         if (externalTickCount >= nextStepAtTick) {
-            val ticksPerStep = 96.0 / 2.0.pow(state.musicState.figureIndex)
             nextStepAtTick += ticksPerStep
+            // If the boundary fell far behind (stall, mode switch), realign
+            // instead of firing a burst of catch-up steps.
+            if (nextStepAtTick <= externalTickCount) {
+                nextStepAtTick = externalTickCount + ticksPerStep
+            }
             pdEngine.triggerBang()
         }
         externalTickCount++
@@ -416,13 +464,26 @@ class TrencadisViewModel(application: Application) : AndroidViewModel(applicatio
      * onSEQ selects the bang-triggered envelope path in the patch and must stay
      * on whenever steps are bang-driven — by the internal metro or by external
      * MIDI ticks. metroSEQ only gates the internal metro, which yields to the
-     * external clock while locked.
+     * external clock while locked. The transport play/stop button gates the
+     * whole sequencer, including externally clocked steps.
      */
     private fun applySequencerState() {
         val state = _state.value
-        val bangDriven = state.selectionMode != PixelSelectionMode.POINTER
+        val bangDriven = state.isPlaying && state.selectionMode != PixelSelectionMode.POINTER
         pdEngine.setSequencerOn(bangDriven)
         pdEngine.setMetroOn(bangDriven && !state.midiState.isClockLocked)
+    }
+
+    fun setPlaying(playing: Boolean) {
+        if (!playing) {
+            noteRouter.allNotesOff(_state.value.midiState.channel)
+        } else if (_state.value.midiState.isClockLocked) {
+            // Resuming under external clock: realign the step boundary so the
+            // tick counter accumulated while stopped doesn't fire a burst.
+            resetExternalClockPhase()
+        }
+        _state.update { it.copy(isPlaying = playing) }
+        applySequencerState()
     }
 
     private fun defaultBlockSizeFor(mode: PixelSelectionMode): Int = when (mode) {

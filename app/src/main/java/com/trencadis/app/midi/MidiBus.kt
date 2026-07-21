@@ -20,7 +20,15 @@ object MidiBus {
     @Volatile var usbNotePort: MidiInputPort? = null
         private set
 
+    /**
+     * Synchronous listener for incoming MIDI data, invoked directly on the MIDI
+     * delivery thread. Realtime clock ticks (0xF8) must not hop through the
+     * SharedFlow + dispatcher path or their timing gets smeared and batched.
+     */
+    @Volatile var realtimeListener: ((ByteArray, Long) -> Unit)? = null
+
     fun postInputEvent(data: ByteArray, timestampNanos: Long) {
+        realtimeListener?.invoke(data, timestampNanos)
         _midiInputEvents.tryEmit(data to timestampNanos)
     }
 

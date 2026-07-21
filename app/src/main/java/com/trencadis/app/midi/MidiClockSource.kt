@@ -58,7 +58,7 @@ class MidiClockSource(
     private val tickTimestamps = ArrayDeque<Long>(25)
     private var beatCount = 0
     private var ticksThisBeat = 0
-    private var collectJob: Job? = null
+    private var lastEmittedBpm = 0f
     private var watchdogJob: Job? = null
 
     // Tracks open devices: deviceId → (MidiDevice, MidiOutputPort, MidiInputPort?)
@@ -84,11 +84,11 @@ class MidiClockSource(
     }
 
     override fun connect() {
-        // Listen for virtual-device path (MidiDeviceService)
-        collectJob = scope.launch {
-            MidiBus.midiInputEvents.collect { (data, timestamp) ->
-                if (data.isNotEmpty()) handleMidiMessage(data, timestamp)
-            }
+        // Listen for virtual-device path (MidiDeviceService). Handled synchronously
+        // on the MIDI delivery thread — routing ticks through a SharedFlow +
+        // coroutine dispatcher batches and jitters them.
+        MidiBus.realtimeListener = { data, timestamp ->
+            if (data.isNotEmpty()) handleMidiMessage(data, timestamp)
         }
         // Register for USB device plug/unplug
         midiManager?.registerDeviceCallback(deviceCallback, Handler(Looper.getMainLooper()))
@@ -110,8 +110,7 @@ class MidiClockSource(
     }
 
     override fun disconnect() {
-        collectJob?.cancel()
-        collectJob = null
+        MidiBus.realtimeListener = null
         watchdogJob?.cancel()
         watchdogJob = null
         midiManager?.unregisterDeviceCallback(deviceCallback)
@@ -178,16 +177,28 @@ class MidiClockSource(
 
     private fun onClockTick(timestampNanos: Long) {
         _isConnected.value = true
-        lastTickNanos = System.nanoTime()
-        tickTimestamps.addLast(timestampNanos)
+        val now = System.nanoTime()
+        lastTickNanos = now
+        // Senders are allowed to pass timestamp 0 ("deliver now"); a zero span
+        // would pin the computed BPM at the coerce bounds. Both MIDI timestamps
+        // and nanoTime share the CLOCK_MONOTONIC base, so receipt time is a
+        // consistent fallback.
+        tickTimestamps.addLast(if (timestampNanos > 0) timestampNanos else now)
         if (tickTimestamps.size > 25) tickTimestamps.removeFirst()
 
         if (tickTimestamps.size >= 2) {
             val spanNanos = tickTimestamps.last() - tickTimestamps.first()
             val intervals = tickTimestamps.size - 1
-            val avgIntervalMs = spanNanos.toDouble() / intervals / 1_000_000.0
-            val bpm = (60_000.0 / (avgIntervalMs * 24)).toFloat().coerceIn(20f, 300f)
-            _bpmFlow.tryEmit(bpm)
+            if (spanNanos > 0) {
+                val avgIntervalMs = spanNanos.toDouble() / intervals / 1_000_000.0
+                val bpm = (60_000.0 / (avgIntervalMs * 24)).toFloat().coerceIn(20f, 300f)
+                // Re-emitting 24x per beat churns state and makes the tempo
+                // display flicker; only publish meaningful changes.
+                if (kotlin.math.abs(bpm - lastEmittedBpm) >= 0.5f) {
+                    lastEmittedBpm = bpm
+                    _bpmFlow.tryEmit(bpm)
+                }
+            }
         }
 
         ticksThisBeat++

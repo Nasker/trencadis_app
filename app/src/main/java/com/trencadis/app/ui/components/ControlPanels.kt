@@ -10,6 +10,9 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -32,6 +35,7 @@ import com.trencadis.app.audio.MusicConstants
 import com.trencadis.app.camera.PixelSelectionMode
 import com.trencadis.app.midi.MidiOutputMode
 import com.trencadis.app.midi.MidiState
+import com.trencadis.app.midi.SyncSource
 import com.trencadis.app.ui.AcidModulation
 import com.trencadis.app.ui.AcidPattern
 
@@ -349,9 +353,15 @@ fun RhythmPanel(
     currentOctave: Int,
     currentFigure: Int,
     tempo: Float,
+    isPlaying: Boolean,
+    syncSource: SyncSource,
+    externalClockAvailable: Boolean,
+    isClockLocked: Boolean,
     onOctaveSelected: (Int) -> Unit,
     onFigureSelected: (Int) -> Unit,
     onTapTempo: () -> Unit,
+    onTogglePlay: () -> Unit,
+    onSyncSourceSelected: (SyncSource) -> Unit,
     modifier: Modifier = Modifier
 ) {
     val figureSymbols = MusicConstants.FIGURE_SYMBOLS
@@ -507,27 +517,99 @@ fun RhythmPanel(
 
             Spacer(modifier = Modifier.width(8.dp))
 
-            // Tap tempo
+            // Play/Stop + Tap tempo + sync source, stacked vertically at equal distances
             Column(
                 horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.Center,
+                verticalArrangement = Arrangement.SpaceEvenly,
                 modifier = Modifier.height(160.dp)
             ) {
+                // Transport toggle: green play arrow when stopped, black stop square when playing
+                Button(
+                    onClick = onTogglePlay,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = if (isPlaying) Color(0xFFEEEEEE) else Color(0xFF1A1A1A)
+                    ),
+                    modifier = Modifier.size(60.dp, 48.dp)
+                ) {
+                    Icon(
+                        imageVector = if (isPlaying) Icons.Default.Stop else Icons.Default.PlayArrow,
+                        contentDescription = if (isPlaying) "Stop" else "Play",
+                        tint = if (isPlaying) Color.Black else Color(0xFF4CAF50)
+                    )
+                }
+
+                // Tap tempo (disabled while following external clock)
                 Button(
                     onClick = onTapTempo,
+                    enabled = !isClockLocked,
                     colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF673AB7)),
                     modifier = Modifier.size(60.dp, 48.dp)
                 ) {
                     Text("TAP", fontSize = 10.sp)
                 }
-                Spacer(modifier = Modifier.height(4.dp))
+
+                // Sync source: INT = internal metro, EXT = follow MIDI clock.
+                // EXT is selectable only while an external clock is sending ticks.
+                Row {
+                    SyncSourceButton(
+                        label = "INT",
+                        isSelected = syncSource == SyncSource.INTERNAL,
+                        isEnabled = true,
+                        onClick = { onSyncSourceSelected(SyncSource.INTERNAL) },
+                        modifier = Modifier.clip(RoundedCornerShape(topStart = 6.dp, bottomStart = 6.dp))
+                    )
+                    SyncSourceButton(
+                        label = "EXT",
+                        isSelected = syncSource == SyncSource.EXTERNAL,
+                        isEnabled = externalClockAvailable,
+                        isActive = isClockLocked,
+                        onClick = { onSyncSourceSelected(SyncSource.EXTERNAL) },
+                        modifier = Modifier.clip(RoundedCornerShape(topEnd = 6.dp, bottomEnd = 6.dp))
+                    )
+                }
+
                 Text(
-                    text = "${tempo.toInt()} BPM",
-                    color = Color.Cyan,
+                    text = "${tempo.toInt()} BPM" + if (isClockLocked) " \u2022 EXT" else "",
+                    color = if (isClockLocked) Color(0xFF00E5A0) else Color.Cyan,
                     fontSize = 10.sp
                 )
             }
         }
+    }
+}
+
+@Composable
+private fun SyncSourceButton(
+    label: String,
+    isSelected: Boolean,
+    isEnabled: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    isActive: Boolean = false
+) {
+    Box(
+        modifier = modifier
+            .size(30.dp, 24.dp)
+            .background(
+                when {
+                    isSelected && isActive -> Color(0xFF00E5A0)
+                    isSelected -> Color(0xFFFF9800)
+                    else -> Color(0xFF1A1A1A)
+                }
+            )
+            .clickable(enabled = isEnabled, onClick = onClick),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(
+            text = label,
+            color = when {
+                isSelected -> Color.Black
+                isEnabled -> Color.White
+                else -> Color.White.copy(alpha = 0.3f)
+            },
+            fontSize = 9.sp,
+            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+        )
     }
 }
 
