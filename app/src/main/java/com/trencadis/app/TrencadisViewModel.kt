@@ -3,6 +3,9 @@ package com.trencadis.app
 import android.app.Application
 import android.content.Intent
 import android.os.Build
+import android.os.Handler
+import android.os.HandlerThread
+import android.os.SystemClock
 import android.util.DisplayMetrics
 import android.view.WindowManager
 import androidx.lifecycle.AndroidViewModel
@@ -34,6 +37,8 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlin.math.abs
+import kotlin.math.floor
 import kotlin.math.pow
 import kotlin.math.roundToInt
 
@@ -152,9 +157,26 @@ class TrencadisViewModel(application: Application) : AndroidViewModel(applicatio
     private var seqSwipeFired = false
 
     // External MIDI clock phase (24 ticks per quarter note). Written from the
-    // MIDI delivery thread, reset from Start messages and lock transitions.
+    // MIDI delivery thread; reset only by MIDI Start (0xFA) so tick 0 stays
+    // anchored to the DAW's transport grid.
     @Volatile private var externalTickCount = 0L
-    @Volatile private var nextStepAtTick = 0.0
+
+    // --- MIDI clock recovery & step scheduler ---
+    // Android delivers 0xF8 ticks jittered and batched (USB driver batching,
+    // binder hops, BLE connection intervals of 30-50 ms). Firing steps on raw
+    // tick arrival is fine at 1/4 (500 ms steps) but audibly wrecks the groove
+    // at 1/8 and 1/16, where the step interval is comparable to the batch size.
+    // Instead, a delay-locked loop smooths tick phase/period and each step is
+    // scheduled at its predicted grid time on a dedicated handler thread.
+    private val clockLock = Any()
+    private val stepSchedulerThread = HandlerThread("midi-step-scheduler").apply { start() }
+    private val stepScheduler = Handler(stepSchedulerThread.looper)
+    private val fireStep = Runnable { fireScheduledStep() }
+    private val tickWindow = ArrayDeque<Pair<Long, Long>>() // (tick index, uptimeMs)
+    private var tickPeriodMs = 60_000.0 / 120.0 / 24.0      // smoothed ms per tick
+    private var expectedTickTimeMs = 0.0                    // DLL-smoothed arrival phase
+    private var scheduledBoundary = -1.0                    // absolute tick pos of pending step
+    private var lastFiredBoundary = -1.0                    // absolute tick pos of last step
 
     /**
      * Recomputes the effective clock lock whenever external clock availability
@@ -178,12 +200,11 @@ class TrencadisViewModel(application: Application) : AndroidViewModel(applicatio
                 isClockLocked = locked
             ))
         }
-        if (locked && !wasLocked) {
-            // Fresh lock: align the step boundary to "now" so stale phase from
-            // a previous lock can't cause a catch-up burst of steps.
-            resetExternalClockPhase()
-        }
+        // Note: the tick counter is deliberately NOT reset here — it keeps
+        // counting through lock changes so the grid anchor from the DAW's
+        // Start message survives and re-locking lands back on the beat.
         if (!locked && wasLocked) {
+            synchronized(clockLock) { cancelScheduledStepLocked() }
             // Release the note the last externally-clocked step left sounding;
             // the internal metro will retrigger from here.
             noteRouter.allNotesOff(_state.value.midiState.channel)
@@ -379,47 +400,102 @@ class TrencadisViewModel(application: Application) : AndroidViewModel(applicatio
     }
 
     private fun resetExternalClockPhase() {
-        externalTickCount = 0L
-        nextStepAtTick = 0.0
+        synchronized(clockLock) {
+            externalTickCount = 0L
+            expectedTickTimeMs = 0.0
+            tickWindow.clear()
+            lastFiredBoundary = -1.0
+            cancelScheduledStepLocked()
+        }
+    }
+
+    private fun cancelScheduledStepLocked() {
+        scheduledBoundary = -1.0
+        stepScheduler.removeCallbacks(fireStep)
     }
 
     /**
      * Called synchronously on the MIDI thread for every 0xF8 clock tick (24 ppqn).
-     * Fires a BANG into the Pd patch at each step boundary of the current figure:
-     * quarter = 24 ticks, eighth = 12, ... (ticksPerStep = 96 / 2^figureIndex).
-     * The fractional accumulator keeps 64th notes (1.5 ticks) on average time.
+     *
+     * Step boundaries live on an ABSOLUTE tick grid anchored at MIDI Start
+     * (boundary = n * ticksPerStep; quarter = 24 ticks, eighth = 12, ...), so
+     * every figure shares the same grid and changing figure mid-play stays on
+     * the DAW's beat. The counter advances even while stopped, unlocked or in
+     * pointer mode so the anchor survives and resuming rejoins the beat.
+     *
+     * Ticks feed a delay-locked loop (smoothed period over a 25-tick window +
+     * gently corrected phase), and the next boundary's BANG is *scheduled* at
+     * its predicted wall-clock time rather than fired on raw tick arrival —
+     * batched/jittered tick delivery no longer lands steps off the grid.
      * The BANG echoes back through the app's "BANG" subscription, so sequence
      * stepping and MIDI note-out follow the exact same path as the internal metro.
      *
-     * Gated on isClockLocked so external ticks can never drive steps while the
-     * internal metro still owns the transport (that overlap caused the
-     * double-stepping during lock transitions), and on isPlaying so the
-     * transport stop also silences externally clocked steps.
+     * Firing is gated on isClockLocked (external ticks can never drive steps
+     * while the internal metro owns the transport) and on isPlaying.
      */
     private fun onExternalClockTick() {
+        val nowMs = SystemClock.uptimeMillis()
         val state = _state.value
-        if (!state.midiState.isClockLocked) return
-        if (!state.isPlaying) return
-        if (state.selectionMode == PixelSelectionMode.POINTER) return
+        synchronized(clockLock) {
+            val tick = externalTickCount++
 
-        val ticksPerStep = 96.0 / 2.0.pow(state.musicState.figureIndex)
-
-        // The figure can shrink mid-play (e.g. whole note → 16th), leaving the
-        // next boundary up to a bar away and stalling the sequencer. Pull it in.
-        if (nextStepAtTick - externalTickCount > ticksPerStep) {
-            nextStepAtTick = externalTickCount + ticksPerStep
-        }
-
-        if (externalTickCount >= nextStepAtTick) {
-            nextStepAtTick += ticksPerStep
-            // If the boundary fell far behind (stall, mode switch), realign
-            // instead of firing a burst of catch-up steps.
-            if (nextStepAtTick <= externalTickCount) {
-                nextStepAtTick = externalTickCount + ticksPerStep
+            // --- clock recovery ---
+            tickWindow.addLast(tick to nowMs)
+            if (tickWindow.size > 25) tickWindow.removeFirst()
+            val (firstTick, firstTime) = tickWindow.first()
+            if (tick > firstTick && nowMs > firstTime) {
+                tickPeriodMs = (nowMs - firstTime).toDouble() / (tick - firstTick)
             }
-            pdEngine.triggerBang()
+            if (expectedTickTimeMs == 0.0) {
+                expectedTickTimeMs = nowMs.toDouble()
+            } else {
+                expectedTickTimeMs += tickPeriodMs
+                val err = nowMs - expectedTickTimeMs
+                if (abs(err) > 4 * tickPeriodMs) {
+                    // Tempo jump or long stall: hard resync instead of chasing.
+                    expectedTickTimeMs = nowMs.toDouble()
+                    tickWindow.clear()
+                    tickWindow.addLast(tick to nowMs)
+                } else {
+                    // Gentle pull toward measured arrivals filters delivery jitter.
+                    expectedTickTimeMs += 0.15 * err
+                }
+            }
+
+            if (!state.midiState.isClockLocked || !state.isPlaying ||
+                state.selectionMode == PixelSelectionMode.POINTER
+            ) {
+                cancelScheduledStepLocked()
+                return
+            }
+
+            // --- schedule the earliest unfired boundary on the shared grid ---
+            val ticksPerStep = 96.0 / 2.0.pow(state.musicState.figureIndex)
+            var boundary = (floor(lastFiredBoundary / ticksPerStep).toLong() + 1) * ticksPerStep
+            // Don't replay boundaries missed during stalls or gate-offs — jump
+            // to the grid position at the current tick.
+            val currentGridPos = floor(tick / ticksPerStep) * ticksPerStep
+            if (boundary < currentGridPos) boundary = currentGridPos
+            if (boundary <= lastFiredBoundary) boundary += ticksPerStep
+
+            val predictedMs = expectedTickTimeMs + (boundary - tick) * tickPeriodMs
+            scheduledBoundary = boundary
+            stepScheduler.removeCallbacks(fireStep)
+            stepScheduler.postAtTime(fireStep, predictedMs.toLong().coerceAtLeast(nowMs))
         }
-        externalTickCount++
+    }
+
+    private fun fireScheduledStep() {
+        synchronized(clockLock) {
+            if (scheduledBoundary < 0) return
+            lastFiredBoundary = scheduledBoundary
+            scheduledBoundary = -1.0
+        }
+        val state = _state.value
+        if (!state.midiState.isClockLocked || !state.isPlaying ||
+            state.selectionMode == PixelSelectionMode.POINTER
+        ) return
+        pdEngine.triggerBang()
     }
 
     private fun freqToMidiPitch(freq: Float): Int =
@@ -476,12 +552,11 @@ class TrencadisViewModel(application: Application) : AndroidViewModel(applicatio
 
     fun setPlaying(playing: Boolean) {
         if (!playing) {
+            synchronized(clockLock) { cancelScheduledStepLocked() }
             noteRouter.allNotesOff(_state.value.midiState.channel)
-        } else if (_state.value.midiState.isClockLocked) {
-            // Resuming under external clock: realign the step boundary so the
-            // tick counter accumulated while stopped doesn't fire a burst.
-            resetExternalClockPhase()
         }
+        // The external tick counter keeps running while stopped, so resuming
+        // under external clock rejoins the DAW's grid — no phase reset needed.
         _state.update { it.copy(isPlaying = playing) }
         applySequencerState()
     }
@@ -541,8 +616,24 @@ class TrencadisViewModel(application: Application) : AndroidViewModel(applicatio
 
                         // Trigger if just started touching OR pixel changed
                         if (!prevState.isTouching || (prevPixel?.gridX != newPixel?.gridX || prevPixel?.gridY != newPixel?.gridY)) {
-                            newPixel?.let { sendPixelToAudio(it) }
-                            pdEngine.triggerBang()
+                            // Publish the touched pixel synchronously: the BANG
+                            // echo fires the MIDI note from selectedPixel, which
+                            // the camera pipeline hasn't refreshed yet on the
+                            // first touch (it was still null, so no note fired
+                            // until the finger dragged to the next pixel).
+                            val ipBefore = lastIp
+                            val jpBefore = lastJp
+                            newPixel?.let { pixel ->
+                                _state.update { it.copy(selectedPixel = pixel) }
+                                sendPixelToAudio(pixel)
+                            }
+                            // sendPixelToAudio already bangs when the position
+                            // changed; only bang here if it didn't (e.g. re-touch
+                            // of the same pixel), so each step is a single bang
+                            // and a single MIDI note instead of two.
+                            if (lastIp == ipBefore && lastJp == jpBefore) {
+                                pdEngine.triggerBang()
+                            }
                         }
                     } else {
                         pdEngine.triggerBang()
@@ -861,6 +952,7 @@ class TrencadisViewModel(application: Application) : AndroidViewModel(applicatio
 
     override fun onCleared() {
         super.onCleared()
+        stepSchedulerThread.quitSafely()
         releaseAudio()
     }
 }

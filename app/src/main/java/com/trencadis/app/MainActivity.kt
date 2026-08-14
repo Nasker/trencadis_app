@@ -15,7 +15,7 @@ import androidx.core.view.WindowInsetsControllerCompat
 import com.trencadis.app.ui.TrencadisScreen
 import com.trencadis.app.ui.theme.TrencadisAppTheme
 
-class MainActivity : ComponentActivity() {
+class  MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         
