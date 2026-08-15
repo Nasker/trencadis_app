@@ -59,6 +59,7 @@ data class Preset(
                 put("chorusMod", synthState.chorusMod.round2())
                 put("delayFigure", synthState.delayFigure.round2())
                 put("feedback", synthState.feedback.round2())
+                put("gateLength", synthState.gateLength.round2())
             })
             
             // Music state
@@ -133,7 +134,8 @@ data class Preset(
                     chorusFreq = synth.optDouble("chorusFreq", 0.0).toFloat(),
                     chorusMod = synth.optDouble("chorusMod", 0.0).toFloat(),
                     delayFigure = synth.optDouble("delayFigure", 1.0).toFloat(),
-                    feedback = synth.optDouble("feedback", 0.4).toFloat().coerceAtMost(0.49f)
+                    feedback = synth.optDouble("feedback", 0.4).toFloat().coerceAtMost(0.49f),
+                    gateLength = synth.optDouble("gateLength", 1.0).toFloat().coerceIn(0f, 1f)
                 ),
                 musicState = MusicState(
                     scaleIndex = music.optInt("scaleIndex", 8),

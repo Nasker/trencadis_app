@@ -51,6 +51,7 @@ class MidiClockSource(
     // tick timing is not smeared by dispatcher hops. Keep the handlers cheap.
     @Volatile var onTick: (() -> Unit)? = null
     @Volatile var onStart: (() -> Unit)? = null
+    @Volatile var onContinue: (() -> Unit)? = null
     @Volatile var onStop: (() -> Unit)? = null
 
     @Volatile private var lastTickNanos = 0L
@@ -166,7 +167,10 @@ class MidiClockSource(
                     tickTimestamps.clear()
                     onStart?.invoke()
                 }
-                0xFB -> _isConnected.value = true
+                0xFB -> {
+                    _isConnected.value = true
+                    onContinue?.invoke()
+                }
                 0xFC -> {
                     _isConnected.value = false
                     onStop?.invoke()

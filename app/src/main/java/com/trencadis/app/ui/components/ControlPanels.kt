@@ -523,9 +523,12 @@ fun RhythmPanel(
                 verticalArrangement = Arrangement.SpaceEvenly,
                 modifier = Modifier.height(160.dp)
             ) {
-                // Transport toggle: green play arrow when stopped, black stop square when playing
+                // Transport toggle: green play arrow when stopped, black stop square when playing.
+                // Disabled while an external clock is actually driving the sequencer — the DAW
+                // transport Start/Stop/Continue messages rule in that case.
                 Button(
                     onClick = onTogglePlay,
+                    enabled = !(syncSource == SyncSource.EXTERNAL && isClockLocked),
                     colors = ButtonDefaults.buttonColors(
                         containerColor = if (isPlaying) Color(0xFFEEEEEE) else Color(0xFF1A1A1A)
                     ),
@@ -717,6 +720,9 @@ fun SynthPanel(
         }
         SynthSlider("Release", synthState.release) { newValue ->
             onSynthStateChange { s -> s.copy(release = newValue) }
+        }
+        SynthSlider("Gate", synthState.gateLength) { newValue ->
+            onSynthStateChange { s -> s.copy(gateLength = newValue) }
         }
         SynthSlider("Distortion", synthState.distortion) { newValue ->
             onSynthStateChange { s -> s.copy(distortion = newValue) }

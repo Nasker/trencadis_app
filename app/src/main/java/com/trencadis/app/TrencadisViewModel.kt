@@ -59,7 +59,8 @@ data class SynthState(
     val chorusFreq: Float = 0f,
     val chorusMod: Float = 0f,
     val delayFigure: Float = 1f,
-    val feedback: Float = 0.4f
+    val feedback: Float = 0.4f,
+    val gateLength: Float = 1f  // 1 = full/legato, 0 = staccato
 )
 
 data class MusicState(
@@ -253,7 +254,9 @@ class TrencadisViewModel(application: Application) : AndroidViewModel(applicatio
         }
 
         // Start collecting MIDI clock (no-op until device connects)
-        midiClockSource.onStart = { resetExternalClockPhase() }
+        midiClockSource.onStart = { onExternalTransportStart() }
+        midiClockSource.onContinue = { onExternalTransportContinue() }
+        midiClockSource.onStop = { onExternalTransportStop() }
         midiClockSource.onTick = { onExternalClockTick() }
         midiClockSource.connect()
         viewModelScope.launch {
@@ -409,6 +412,36 @@ class TrencadisViewModel(application: Application) : AndroidViewModel(applicatio
         }
     }
 
+    /** MIDI Start (0xFA): hard phase reset and start. */
+    private fun onExternalTransportStart() {
+        if (_state.value.midiState.syncSource != SyncSource.EXTERNAL) return
+        _state.update {
+            it.copy(isPlaying = true, midiState = it.midiState.copy(isClockLocked = true))
+        }
+        applySequencerState()
+        resetExternalClockPhase()
+    }
+
+    /** MIDI Continue (0xFB): resume on the current grid. */
+    private fun onExternalTransportContinue() {
+        if (_state.value.midiState.syncSource != SyncSource.EXTERNAL) return
+        _state.update {
+            it.copy(isPlaying = true, midiState = it.midiState.copy(isClockLocked = true))
+        }
+        applySequencerState()
+    }
+
+    /** MIDI Stop (0xFC) or clock watchdog timeout: stop transport. */
+    private fun onExternalTransportStop() {
+        if (_state.value.midiState.syncSource != SyncSource.EXTERNAL) return
+        synchronized(clockLock) { cancelScheduledStepLocked() }
+        noteRouter.allNotesOff(_state.value.midiState.channel)
+        _state.update {
+            it.copy(isPlaying = false, midiState = it.midiState.copy(isClockLocked = false))
+        }
+        applySequencerState()
+    }
+
     private fun cancelScheduledStepLocked() {
         scheduledBoundary = -1.0
         stepScheduler.removeCallbacks(fireStep)
@@ -427,15 +460,34 @@ class TrencadisViewModel(application: Application) : AndroidViewModel(applicatio
      * gently corrected phase), and the next boundary's BANG is *scheduled* at
      * its predicted wall-clock time rather than fired on raw tick arrival —
      * batched/jittered tick delivery no longer lands steps off the grid.
-     * The BANG echoes back through the app's "BANG" subscription, so sequence
+     * The BANG echoes back through the app\'s "BANG" subscription, so sequence
      * stepping and MIDI note-out follow the exact same path as the internal metro.
      *
-     * Firing is gated on isClockLocked (external ticks can never drive steps
-     * while the internal metro owns the transport) and on isPlaying.
+     * Firing is gated on syncSource == EXTERNAL and isPlaying. isClockLocked is
+     * also set immediately on the MIDI thread so the internal metro is silenced
+     * before it can fire an extra step, and so the first tick can start a DAW
+     * that was already playing (no Start/Continue message) or one that just resumed.
      */
     private fun onExternalClockTick() {
         val nowMs = SystemClock.uptimeMillis()
-        val state = _state.value
+        var state = _state.value
+
+        // Lock to the first external tick to avoid a race with the isConnected
+        // StateFlow (which runs on the main thread and may arrive too late).
+        if (state.midiState.syncSource == SyncSource.EXTERNAL &&
+            (!state.isPlaying || !state.midiState.isClockLocked) &&
+            state.selectionMode != PixelSelectionMode.POINTER
+        ) {
+            _state.update {
+                it.copy(
+                    isPlaying = true,
+                    midiState = it.midiState.copy(isClockLocked = true)
+                )
+            }
+            applySequencerState()
+            state = _state.value
+        }
+
         synchronized(clockLock) {
             val tick = externalTickCount++
 
@@ -462,7 +514,8 @@ class TrencadisViewModel(application: Application) : AndroidViewModel(applicatio
                 }
             }
 
-            if (!state.midiState.isClockLocked || !state.isPlaying ||
+            if (state.midiState.syncSource != SyncSource.EXTERNAL ||
+                !state.isPlaying ||
                 state.selectionMode == PixelSelectionMode.POINTER
             ) {
                 cancelScheduledStepLocked()
@@ -492,10 +545,56 @@ class TrencadisViewModel(application: Application) : AndroidViewModel(applicatio
             scheduledBoundary = -1.0
         }
         val state = _state.value
-        if (!state.midiState.isClockLocked || !state.isPlaying ||
+        if (state.midiState.syncSource != SyncSource.EXTERNAL ||
+            !state.isPlaying ||
             state.selectionMode == PixelSelectionMode.POINTER
         ) return
         pdEngine.triggerBang()
+    }
+
+    /**
+     * Sends a note-on for the given pixel and lets [NoteRouter] schedule the
+     * matching note-off after [gateLength] of the current step duration.
+     * Gate = 1.0 means no scheduled off (legato: the next note-on releases the
+     * previous one); smaller values shorten the note for detached/staccato
+     * articulation. Pointer mode keeps the note held while the finger is down.
+     */
+    private fun playNote(pixel: PixelData, stepPeriodMs: Double) {
+        val state = _state.value
+        if (!state.midiState.enabled ||
+            state.midiState.outputMode == MidiOutputMode.INTERNAL
+        ) return
+
+        val music = state.musicState
+        val freq = MusicConstants.calculateFrequency(
+            pixel.hue,
+            music.scaleIndex,
+            music.keyIndex,
+            music.octaveIndex,
+            music.chordTypeIndex,
+            music.useChordMapping
+        )
+        val pitch = freqToMidiPitch(freq)
+        val velocity = (pixel.brightness * 127).toInt().coerceIn(1, 127)
+        val channel = state.midiState.channel
+
+        val durationMs = if (state.selectionMode == PixelSelectionMode.POINTER) {
+            -1L
+        } else {
+            val gate = state.synthState.gateLength.coerceIn(0f, 1f)
+            if (gate < 0.99f && stepPeriodMs > 0) {
+                (stepPeriodMs * gate).toLong().coerceAtLeast(4L)
+            } else {
+                -1L
+            }
+        }
+
+        noteRouter.noteOn(pitch, velocity, channel, durationMs)
+    }
+
+    private fun currentStepPeriodMs(): Double {
+        val music = _state.value.musicState
+        return music.periodTempo.toDouble() / 2.0.pow((music.figureIndex - 2).toDouble())
     }
 
     private fun freqToMidiPitch(freq: Float): Int =
@@ -507,16 +606,8 @@ class TrencadisViewModel(application: Application) : AndroidViewModel(applicatio
             state.copy(sequenceIndex = (state.sequenceIndex + 1) % maxIndex)
         }
         val state = _state.value
-        if (state.midiState.enabled && state.midiState.outputMode != MidiOutputMode.INTERNAL) {
-            state.selectedPixel?.let { pixel ->
-                val music = state.musicState
-                val freq = MusicConstants.calculateFrequency(
-                    pixel.hue, music.scaleIndex, music.keyIndex, music.octaveIndex, music.chordTypeIndex, music.useChordMapping
-                )
-                val pitch = freqToMidiPitch(freq)
-                val velocity = (pixel.brightness * 127).toInt().coerceIn(1, 127)
-                noteRouter.noteOn(pitch, velocity, state.midiState.channel)
-            }
+        state.selectedPixel?.let { pixel ->
+            playNote(pixel, currentStepPeriodMs())
         }
     }
     
@@ -550,7 +641,7 @@ class TrencadisViewModel(application: Application) : AndroidViewModel(applicatio
         pdEngine.setMetroOn(bangDriven && !state.midiState.isClockLocked)
     }
 
-    fun setPlaying(playing: Boolean) {
+    private fun setTransportPlaying(playing: Boolean) {
         if (!playing) {
             synchronized(clockLock) { cancelScheduledStepLocked() }
             noteRouter.allNotesOff(_state.value.midiState.channel)
@@ -559,6 +650,17 @@ class TrencadisViewModel(application: Application) : AndroidViewModel(applicatio
         // under external clock rejoins the DAW's grid — no phase reset needed.
         _state.update { it.copy(isPlaying = playing) }
         applySequencerState()
+    }
+
+    fun setPlaying(playing: Boolean) {
+        val state = _state.value
+        // While an external clock is actually driving the sequencer, the DAW
+        // transport Start/Stop/Continue messages (or a watchdog timeout) rule.
+        if (state.midiState.syncSource == SyncSource.EXTERNAL &&
+            state.midiState.isClockLocked
+        ) return
+
+        setTransportPlaying(playing)
     }
 
     private fun defaultBlockSizeFor(mode: PixelSelectionMode): Int = when (mode) {
@@ -714,22 +816,9 @@ class TrencadisViewModel(application: Application) : AndroidViewModel(applicatio
         sendPixelToAudio(pixel)
         pdEngine.triggerBang()
 
-        // Mirror the note-out logic used by the auto-step sequencer for external destinations.
-        val state = _state.value
-        if (state.midiState.enabled && state.midiState.outputMode != MidiOutputMode.INTERNAL) {
-            val music = state.musicState
-            val freq = MusicConstants.calculateFrequency(
-                pixel.hue,
-                music.scaleIndex,
-                music.keyIndex,
-                music.octaveIndex,
-                music.chordTypeIndex,
-                music.useChordMapping
-            )
-            val pitch = freqToMidiPitch(freq)
-            val velocity = (pixel.brightness * 127).toInt().coerceIn(1, 127)
-            noteRouter.noteOn(pitch, velocity, state.midiState.channel)
-        }
+        // The BANG echo already routes the pixel through incrementSequenceIndex,
+        // which sends the external MIDI note with the correct gate length.
+        // Re-sending it here caused a duplicate note-on.
     }
 
     private fun dominantGridDelta(dx: Float, dy: Float): Pair<Int, Int> {
@@ -755,6 +844,7 @@ class TrencadisViewModel(application: Application) : AndroidViewModel(applicatio
     
     fun setFigure(index: Int) {
         _state.update { it.copy(musicState = it.musicState.copy(figureIndex = index)) }
+        applyMusicState(_state.value.musicState)
     }
 
     fun setChordType(index: Int) {
@@ -763,9 +853,9 @@ class TrencadisViewModel(application: Application) : AndroidViewModel(applicatio
     
     fun setTempo(bpm: Float) {
         val period = (60000f / bpm)
-        _state.update { 
-            it.copy(musicState = it.musicState.copy(tempo = bpm, periodTempo = period)) 
-        }
+        val music = _state.value.musicState.copy(tempo = bpm, periodTempo = period)
+        _state.update { it.copy(musicState = music) }
+        applyMusicState(music)
     }
     
     fun tapTempo(currentTimeMs: Long, previousTapTimeMs: Long): Float {
@@ -954,5 +1044,6 @@ class TrencadisViewModel(application: Application) : AndroidViewModel(applicatio
         super.onCleared()
         stepSchedulerThread.quitSafely()
         releaseAudio()
+        noteRouter.release()
     }
 }
