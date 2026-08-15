@@ -13,7 +13,12 @@ data class MidiState(
     val syncSource: SyncSource = SyncSource.EXTERNAL,
     val externalBpm: Float = 0f,
     val bleEnabled: Boolean = false,
-    val bleConnected: Boolean = false
+    val bleConnected: Boolean = false,
+    // Follow chords played on an external MIDI device: detected chords set the
+    // key + chord mapping so the pixel sequencer arpeggiates over the chord.
+    val chordFollowEnabled: Boolean = false,
+    // Human-readable label of the last detected chord, e.g. "A min7".
+    val detectedChordLabel: String = ""
 )
 
 enum class MidiOutputMode {

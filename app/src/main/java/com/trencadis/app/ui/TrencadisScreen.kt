@@ -286,9 +286,12 @@ fun TrencadisScreen(
                     currentKey = state.musicState.keyIndex,
                     currentChordType = state.musicState.chordTypeIndex,
                     useChordMapping = state.musicState.useChordMapping,
+                    chordFollowEnabled = state.midiState.chordFollowEnabled,
+                    detectedChordLabel = state.midiState.detectedChordLabel,
                     onScaleSelected = { viewModel.setScale(it) },
                     onKeySelected = { viewModel.setKey(it) },
-                    onChordTypeSelected = { viewModel.setChordType(it) }
+                    onChordTypeSelected = { viewModel.setChordType(it) },
+                    onChordFollowEnabled = { viewModel.setChordFollowEnabled(it) }
                 )
             }
 

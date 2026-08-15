@@ -47,6 +47,11 @@ class MidiClockSource(
     private val _scaleFlow = MutableSharedFlow<Int>(extraBufferCapacity = 8)
     override val scaleFlow: Flow<Int> = _scaleFlow.asSharedFlow()
 
+    // Incoming note-on/off events from any connected device (USB or virtual).
+    // Not timing-critical (used for harmony analysis), so a SharedFlow is fine.
+    private val _noteEventFlow = MutableSharedFlow<NoteEvent>(extraBufferCapacity = 128)
+    val noteEventFlow: Flow<NoteEvent> = _noteEventFlow.asSharedFlow()
+
     // Realtime callbacks, invoked synchronously on the MIDI delivery thread so
     // tick timing is not smeared by dispatcher hops. Keep the handlers cheap.
     @Volatile var onTick: (() -> Unit)? = null
@@ -55,6 +60,12 @@ class MidiClockSource(
     @Volatile var onStop: (() -> Unit)? = null
 
     @Volatile private var lastTickNanos = 0L
+
+    // Channel-voice parser state. MIDI running status lets senders omit the
+    // status byte on repeated messages, and realtime bytes (>= 0xF8) may be
+    // interleaved mid-message without disturbing it.
+    private var voiceStatus = 0
+    private var voiceData1 = -1
 
     private val tickTimestamps = ArrayDeque<Long>(25)
     private var beatCount = 0
@@ -158,22 +169,58 @@ class MidiClockSource(
         // interleaved with channel messages in the same packet, so scan every
         // byte. Data bytes are <= 0x7F and can never false-match.
         for (b in data) {
-            when (b.toInt() and 0xFF) {
-                0xF8 -> onClockTick(timestamp)
-                0xFA -> {
-                    _isConnected.value = true
-                    beatCount = 0
-                    ticksThisBeat = 0
-                    tickTimestamps.clear()
-                    onStart?.invoke()
+            val v = b.toInt() and 0xFF
+            when {
+                v >= 0xF8 -> when (v) {
+                    0xF8 -> onClockTick(timestamp)
+                    0xFA -> {
+                        _isConnected.value = true
+                        beatCount = 0
+                        ticksThisBeat = 0
+                        tickTimestamps.clear()
+                        onStart?.invoke()
+                    }
+                    0xFB -> {
+                        _isConnected.value = true
+                        onContinue?.invoke()
+                    }
+                    0xFC -> {
+                        _isConnected.value = false
+                        onStop?.invoke()
+                    }
                 }
-                0xFB -> {
-                    _isConnected.value = true
-                    onContinue?.invoke()
+                // System common messages cancel running status.
+                v >= 0xF0 -> {
+                    voiceStatus = 0
+                    voiceData1 = -1
                 }
-                0xFC -> {
-                    _isConnected.value = false
-                    onStop?.invoke()
+                // New channel-voice status byte.
+                v >= 0x80 -> {
+                    voiceStatus = v
+                    voiceData1 = -1
+                }
+                // Data byte: only note-on/off messages are assembled; data
+                // bytes of other channel messages (CC, pitch bend, ...) fall
+                // through harmlessly because their status is never 0x8n/0x9n.
+                else -> when (voiceStatus and 0xF0) {
+                    0x90, 0x80 -> {
+                        if (voiceData1 < 0) {
+                            voiceData1 = v
+                        } else {
+                            val note = voiceData1
+                            voiceData1 = -1 // running status: next data byte starts a new note
+                            // Note-on with velocity 0 is a note-off by convention.
+                            val isOn = (voiceStatus and 0xF0) == 0x90 && v > 0
+                            _noteEventFlow.tryEmit(
+                                NoteEvent(
+                                    note = note,
+                                    velocity = v,
+                                    isOn = isOn,
+                                    channel = (voiceStatus and 0x0F) + 1
+                                )
+                            )
+                        }
+                    }
                 }
             }
         }

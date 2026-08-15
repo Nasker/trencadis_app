@@ -24,6 +24,8 @@ import com.trencadis.app.preset.Preset
 import com.trencadis.app.preset.PresetManager
 import com.trencadis.app.midi.BleMidiPeripheral
 import com.trencadis.app.midi.BleNoteDestination
+import com.trencadis.app.midi.DetectedChord
+import com.trencadis.app.midi.HarmonyAnalyzer
 import com.trencadis.app.midi.MidiBus
 import com.trencadis.app.midi.MidiClockSource
 import com.trencadis.app.midi.MidiNoteDestination
@@ -147,6 +149,7 @@ class TrencadisViewModel(application: Application) : AndroidViewModel(applicatio
     private val bleNoteDestination = BleNoteDestination(blePeripheral)
     private val noteRouter = NoteRouter().apply { add(pdNoteDestination) }
     private val midiClockSource = MidiClockSource(application, viewModelScope)
+    private val harmonyAnalyzer = HarmonyAnalyzer()
     
     private var lastIp = 0f
     private var lastJp = 0f
@@ -272,6 +275,45 @@ class TrencadisViewModel(application: Application) : AndroidViewModel(applicatio
                 if (_state.value.midiState.isClockLocked) setTempo(bpm)
                 _state.update { it.copy(midiState = it.midiState.copy(externalBpm = bpm)) }
             }
+        }
+        // Chord follow: held external notes are analyzed on every note-on and,
+        // when a chord is recognized, drive the key + chord mapping so the
+        // pixel sequencer arpeggiates over the played harmony. Detection is
+        // latching — mid-strum/unrecognized sets keep the previous chord.
+        viewModelScope.launch {
+            midiClockSource.noteEventFlow.collect { event ->
+                if (event.isOn) harmonyAnalyzer.noteOn(event.note)
+                else harmonyAnalyzer.noteOff(event.note)
+                if (event.isOn && _state.value.midiState.chordFollowEnabled) {
+                    harmonyAnalyzer.analyze()?.let { applyDetectedChord(it) }
+                }
+            }
+        }
+    }
+
+    private fun applyDetectedChord(chord: DetectedChord) {
+        _state.update {
+            if (it.musicState.keyIndex == chord.rootPc &&
+                it.musicState.chordTypeIndex == chord.chordTypeIndex &&
+                it.musicState.useChordMapping
+            ) return@update it
+            it.copy(
+                musicState = it.musicState.copy(
+                    keyIndex = chord.rootPc,
+                    chordTypeIndex = chord.chordTypeIndex,
+                    useChordMapping = true
+                ),
+                midiState = it.midiState.copy(detectedChordLabel = chord.label)
+            )
+        }
+    }
+
+    fun setChordFollowEnabled(enabled: Boolean) {
+        _state.update {
+            it.copy(midiState = it.midiState.copy(
+                chordFollowEnabled = enabled,
+                detectedChordLabel = if (enabled) it.midiState.detectedChordLabel else ""
+            ))
         }
     }
     

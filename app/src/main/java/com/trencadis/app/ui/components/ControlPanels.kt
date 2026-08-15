@@ -233,9 +233,12 @@ fun ScalesPanel(
     currentKey: Int,
     currentChordType: Int,
     useChordMapping: Boolean = false,
+    chordFollowEnabled: Boolean = false,
+    detectedChordLabel: String = "",
     onScaleSelected: (Int) -> Unit,
     onKeySelected: (Int) -> Unit,
     onChordTypeSelected: (Int) -> Unit,
+    onChordFollowEnabled: (Boolean) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     Column(
@@ -244,6 +247,37 @@ fun ScalesPanel(
             .background(Color(0xAA7A7A7A))
             .padding(12.dp)
     ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            val followLabel = buildString {
+                append("Listen")
+                if (chordFollowEnabled && detectedChordLabel.isNotBlank()) {
+                    append(": ")
+                    append(detectedChordLabel)
+                }
+            }
+            Text(
+                text = followLabel,
+                color = Color.White,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.weight(1f)
+            )
+            Switch(
+                checked = chordFollowEnabled,
+                onCheckedChange = onChordFollowEnabled,
+                modifier = Modifier.height(24.dp),
+                colors = SwitchDefaults.colors(
+                    checkedThumbColor = Color(0xFF00E5A0),
+                    checkedTrackColor = Color(0xFF00E5A0).copy(alpha = 0.4f)
+                )
+            )
+        }
+
+        Spacer(modifier = Modifier.height(8.dp))
+
         Text(
             text = "SCALE",
             color = Color.White,
