@@ -170,7 +170,9 @@ class TrencadisViewModel(application: Application) : AndroidViewModel(applicatio
     // Instead, a delay-locked loop smooths tick phase/period and each step is
     // scheduled at its predicted grid time on a dedicated handler thread.
     private val clockLock = Any()
-    private val stepSchedulerThread = HandlerThread("midi-step-scheduler").apply { start() }
+    private val stepSchedulerThread =
+        HandlerThread("midi-step-scheduler", android.os.Process.THREAD_PRIORITY_URGENT_AUDIO)
+            .apply { start() }
     private val stepScheduler = Handler(stepSchedulerThread.looper)
     private val fireStep = Runnable { fireScheduledStep() }
     private val tickWindow = ArrayDeque<Pair<Long, Long>>() // (tick index, uptimeMs)
@@ -235,10 +237,11 @@ class TrencadisViewModel(application: Application) : AndroidViewModel(applicatio
         android.util.Log.d("TrencadisAR", "init hardware ratio=$realRatio (${if (realRatio < 1f) "portrait" else "landscape"})")
         _state.update { it.copy(screenAspectRatio = realRatio) }
 
+        // Handle the BANG synchronously on the delivery thread. Bouncing it
+        // through a main-thread coroutine queued every sequenced MIDI note
+        // behind Compose/render work, adding up to a frame of jitter per note.
         pdEngine.setOnBangReceived {
-            viewModelScope.launch {
-                incrementSequenceIndex()
-            }
+            incrementSequenceIndex()
         }
         pdEngine.setOnEnvelopeReceived { level ->
             pushEnvelopeSample(level.coerceIn(0f, 1f))

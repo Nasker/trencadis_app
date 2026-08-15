@@ -3,6 +3,7 @@ package com.trencadis.app.midi
 import android.os.Handler
 import android.os.HandlerThread
 import android.os.Looper
+import android.os.Process
 import com.trencadis.app.sync.NoteDestination
 
 /**
@@ -11,10 +12,14 @@ import com.trencadis.app.sync.NoteDestination
  * All note events (add/remove destinations, note-on, note-off) are queued on a
  * dedicated looper so off/on pairs are emitted in the correct order and so the
  * gate-length scheduled note-off cannot race with the next note-on.
+ *
+ * The thread runs at audio priority: at default priority the queue hop added
+ * audible scheduling jitter to every note under UI/render load.
  */
 class NoteRouter {
 
-    private val noteThread = HandlerThread("note-router").apply { start() }
+    private val noteThread =
+        HandlerThread("note-router", Process.THREAD_PRIORITY_URGENT_AUDIO).apply { start() }
     private val handler = Handler(noteThread.looper)
 
     private val destinations = mutableListOf<NoteDestination>()

@@ -181,14 +181,15 @@ fun TrencadisScreen(
                     viewModel.setTouch(x, y, isTouching, canvasWidth, canvasHeight)
                 },
                 onDoubleTap = { x, y, width, height ->
-                    // In pointer mode the canvas is a play surface; don't treat touches as
-                    // panel-management gestures.
-                    if (state.selectionMode != PixelSelectionMode.POINTER) {
-                        // Check if any panel is open
-                        val anyPanelOpen = state.showModesPanel || state.showScalesPanel ||
-                                           state.showKeysPanel || state.showSynthPanel ||
-                                           state.showPalettePanel || state.showPresetPanel
+                    // Check if any panel is open
+                    val anyPanelOpen = state.showModesPanel || state.showScalesPanel ||
+                                       state.showKeysPanel || state.showSynthPanel ||
+                                       state.showPalettePanel || state.showPresetPanel
 
+                    // In pointer mode the canvas is a play surface, so double-tap is
+                    // musical while nothing is open — but once a panel is showing it
+                    // must still be dismissable, otherwise sticky panels get stuck.
+                    if (state.selectionMode != PixelSelectionMode.POINTER || anyPanelOpen) {
                         if (anyPanelOpen) {
                             // Check if tap is outside all panel areas
                             val inModesArea = x < width * 0.35f && y < height * 0.5f
