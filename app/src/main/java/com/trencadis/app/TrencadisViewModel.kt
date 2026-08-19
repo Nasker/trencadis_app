@@ -84,6 +84,11 @@ data class TrencadisState(
     val blockSize: Int = 120,
     // User override for grid resolution; null = follow per-mode defaults
     val customGridResolution: Int? = null,
+    // True while a captured/loaded still image is frozen in place of the live
+    // camera feed. Only resuming live camera (or a hardware-level change like
+    // flipping the camera or grid resolution) should clear this — switching
+    // pixel selection modes must not defeat the still.
+    val isFrameFrozen: Boolean = false,
     val synthState: SynthState = SynthState(),
     val musicState: MusicState = MusicState(),
     val touchX: Float = 0f,
@@ -664,12 +669,19 @@ class TrencadisViewModel(application: Application) : AndroidViewModel(applicatio
         }
         _state.update { it.copy(selectionMode = mode) }
 
+        // blockSize changes hot-swap onto the live analyzer (no camera rebind),
+        // so applying the per-mode resolution default is safe even while frozen.
         val newBlockSize = _state.value.customGridResolution ?: defaultBlockSizeFor(mode)
         _state.update { it.copy(blockSize = newBlockSize) }
 
         // Update sequencer state — the internal metro stays off while an
         // external MIDI clock is driving the steps.
         applySequencerState()
+    }
+
+    /** Marks whether a captured/loaded still image is currently frozen in place of the live camera feed. */
+    fun setFrameFrozen(frozen: Boolean) {
+        _state.update { it.copy(isFrameFrozen = frozen) }
     }
 
     /**

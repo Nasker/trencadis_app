@@ -2,7 +2,15 @@ package com.trencadis.app.ui
 
 import android.Manifest
 import android.content.Intent
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.graphics.Matrix
+import android.media.ExifInterface
+import android.net.Uri
 import android.os.Build
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.Preview
@@ -22,6 +30,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import com.trencadis.app.ui.components.HelpDialog
+import com.trencadis.app.ui.components.ImageFramingDialog
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -135,16 +144,43 @@ fun TrencadisScreen(
     // Stable reference to the live camera analyzer, used to trigger still capture
     // from the capture button without threading state through the camera composable.
     val analyzerRef = remember { AtomicReference<CameraPixelAnalyzer?>(null) }
-    // Mirrors the analyzer's frozen/live status so the UI can reflect it.
-    var isFrameFrozen by remember { mutableStateOf(false) }
-    // The analyzer is recreated when these change (see key() below), which drops
-    // any freeze it was holding — keep the UI mirror in sync.
-    LaunchedEffect(state.blockSize, state.useFrontCamera, state.screenAspectRatio) {
-        isFrameFrozen = false
+    // Frozen/live status lives in the ViewModel (state.isFrameFrozen) so that
+    // switching pixel selection modes or grid resolution doesn't defeat it —
+    // only resuming live camera, or a hardware-level change below, should.
+    // The analyzer is recreated when these change (see key() below), which
+    // drops any freeze it was holding — keep the state mirror in sync.
+    LaunchedEffect(state.useFrontCamera, state.screenAspectRatio) {
+        if (state.isFrameFrozen) {
+            viewModel.setFrameFrozen(false)
+        }
     }
     
     if (showHelp) {
         HelpDialog(onDismiss = { showHelp = false })
+    }
+
+    // Gallery image loading: pick -> decode -> frame (crop) -> feed into the
+    // same frozen-grid pipeline that FREEZE uses, so all effects apply to it.
+    var pickedBitmap by remember { mutableStateOf<Bitmap?>(null) }
+    val pickImageLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.PickVisualMedia()
+    ) { uri ->
+        if (uri != null) {
+            pickedBitmap = loadBitmapFromUri(context, uri)
+        }
+    }
+
+    pickedBitmap?.let { bitmap ->
+        ImageFramingDialog(
+            source = bitmap,
+            aspectRatio = state.screenAspectRatio,
+            onConfirm = { cropped ->
+                analyzerRef.get()?.loadStillImage(cropped)
+                viewModel.setFrameFrozen(true)
+                pickedBitmap = null
+            },
+            onCancel = { pickedBitmap = null }
+        )
     }
 
     Box(
@@ -259,17 +295,22 @@ fun TrencadisScreen(
                     onToggleCamera = { viewModel.toggleCamera() },
                     onGridResolutionChanged = { viewModel.setGridResolution(it) },
                     onGridResolutionReset = { viewModel.resetGridResolution() },
-                    isFrameFrozen = isFrameFrozen,
+                    isFrameFrozen = state.isFrameFrozen,
                     onCaptureStill = {
-                        if (isFrameFrozen) {
+                        if (state.isFrameFrozen) {
                             analyzerRef.get()?.resumeLiveCamera()
-                            isFrameFrozen = false
+                            viewModel.setFrameFrozen(false)
                             android.widget.Toast.makeText(context, "Live camera resumed", android.widget.Toast.LENGTH_SHORT).show()
                         } else {
                             analyzerRef.get()?.captureStillImage()
-                            isFrameFrozen = true
+                            viewModel.setFrameFrozen(true)
                             android.widget.Toast.makeText(context, "Frame frozen & saved", android.widget.Toast.LENGTH_SHORT).show()
                         }
+                    },
+                    onLoadImage = {
+                        pickImageLauncher.launch(
+                            PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+                        )
                     }
                 )
             }
@@ -474,14 +515,19 @@ private fun CameraPreviewWithAnalysis(
 
     val cameraExecutor = remember { Executors.newSingleThreadExecutor() }
 
-    // Hot-swap blob modulation on every recompose — no camera rebind required
-    SideEffect { analyzerRef.get()?.blobModulation = blobModulation }
+    // Hot-swap blob modulation and grid resolution on every recompose — neither
+    // needs a camera rebind (blockSize only affects software grid extraction),
+    // and hot-swapping means a resolution change never drops a frozen still.
+    SideEffect {
+        analyzerRef.get()?.setBlobModulation(blobModulation)
+        analyzerRef.get()?.setBlockSize(blockSize)
+    }
 
     DisposableEffect(Unit) { onDispose { cameraExecutor.shutdown() } }
 
     // key() forces AndroidView recreation (and camera rebind) ONLY when hardware params change.
-    // blobModulation is intentionally excluded from the key.
-    key(blockSize, useFrontCamera, screenAspectRatio) {
+    // blobModulation and blockSize are intentionally excluded from the key.
+    key(useFrontCamera, screenAspectRatio) {
         AndroidView(
             factory = { ctx ->
                 val newAnalyzer = CameraPixelAnalyzer(
@@ -656,5 +702,49 @@ private fun PanelIconButton(
             fontSize = 24.sp,
             color = Color.White.copy(alpha = 0.8f)
         )
+    }
+}
+
+/**
+ * Decode a gallery-picked image, downsampling large photos to a sane working
+ * size and correcting for EXIF orientation (BitmapFactory ignores it).
+ */
+private fun loadBitmapFromUri(context: android.content.Context, uri: Uri): Bitmap? {
+    return try {
+        val resolver = context.contentResolver
+
+        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        resolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, bounds) }
+
+        val maxDimension = 2048
+        var sampleSize = 1
+        while (bounds.outWidth / sampleSize > maxDimension || bounds.outHeight / sampleSize > maxDimension) {
+            sampleSize *= 2
+        }
+
+        val decodeOptions = BitmapFactory.Options().apply { inSampleSize = sampleSize }
+        val bitmap = resolver.openInputStream(uri)?.use {
+            BitmapFactory.decodeStream(it, null, decodeOptions)
+        } ?: return null
+
+        val rotationDegrees = resolver.openInputStream(uri)?.use { stream ->
+            when (ExifInterface(stream).getAttributeInt(
+                ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_NORMAL
+            )) {
+                ExifInterface.ORIENTATION_ROTATE_90 -> 90f
+                ExifInterface.ORIENTATION_ROTATE_180 -> 180f
+                ExifInterface.ORIENTATION_ROTATE_270 -> 270f
+                else -> 0f
+            }
+        } ?: 0f
+
+        if (rotationDegrees == 0f) {
+            bitmap
+        } else {
+            val matrix = Matrix().apply { postRotate(rotationDegrees) }
+            Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height, matrix, true)
+        }
+    } catch (e: Exception) {
+        null
     }
 }

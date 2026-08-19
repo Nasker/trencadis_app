@@ -53,6 +53,7 @@ fun ModesPanel(
     onGridResolutionReset: () -> Unit,
     isFrameFrozen: Boolean = false,
     onCaptureStill: () -> Unit = {},
+    onLoadImage: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     Column(
@@ -135,6 +136,31 @@ fun ModesPanel(
         ) {
             Text(
                 text = if (isFrameFrozen) "▶ LIVE" else "📸 FREEZE",
+                color = Color.White,
+                fontSize = 9.sp,
+                fontWeight = FontWeight.Bold
+            )
+        }
+
+        Spacer(modifier = Modifier.height(4.dp))
+
+        // Load a picture from the device gallery, frame it, and feed it into
+        // the same still-frame pipeline as FREEZE (all effects apply to it).
+        Box(
+            modifier = Modifier
+                .size(60.dp, 32.dp)
+                .clip(RoundedCornerShape(8.dp))
+                .background(Color(0xFF424242))
+                .border(
+                    width = 2.dp,
+                    color = Color.White.copy(alpha = 0.5f),
+                    shape = RoundedCornerShape(8.dp)
+                )
+                .clickable(onClick = onLoadImage),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                text = "🖼 LOAD",
                 color = Color.White,
                 fontSize = 9.sp,
                 fontWeight = FontWeight.Bold
@@ -249,7 +275,7 @@ fun ScalesPanel(
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.fillMaxWidth()
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             val followLabel = buildString {
                 append("Listen")
@@ -262,8 +288,7 @@ fun ScalesPanel(
                 text = followLabel,
                 color = Color.White,
                 fontSize = 12.sp,
-                fontWeight = FontWeight.Bold,
-                modifier = Modifier.weight(1f)
+                fontWeight = FontWeight.Bold
             )
             Switch(
                 checked = chordFollowEnabled,

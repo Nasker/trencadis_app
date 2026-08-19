@@ -16,10 +16,10 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 
 class CameraPixelAnalyzer(
-    private val blockSize: Int = 20,
+    @Volatile private var blockSize: Int = 20,
     private val mirrorHorizontally: Boolean = false,
     private val screenAspectRatio: Float = 9f / 16f, // width/height, portrait default
-    @Volatile var blobModulation: BlobModulation? = null,
+    @Volatile private var blobModulation: BlobModulation? = null,
     private val onPixelGridReady: (PixelGrid) -> Unit,
     // Optional raw still-image capture support. Both null by default so existing
     // call sites are unaffected; pass both to enable captureStillImage().
@@ -49,6 +49,11 @@ class CameraPixelAnalyzer(
     // frozen frame exactly as it would off a live one.
     @Volatile private var frozenGrid: PixelGrid? = null
 
+    // The raw bitmap behind the current freeze (camera capture or loaded
+    // image), kept around so grid-resolution changes can re-extract the grid
+    // at the new blockSize without losing the freeze. Cleared on resume.
+    @Volatile private var frozenSourceBitmap: Bitmap? = null
+
     /**
      * Request that the next analyzed camera frame be saved as a still image
      * AND become the frozen source for the pixel grid (live camera pauses).
@@ -60,6 +65,58 @@ class CameraPixelAnalyzer(
     /** Resume reading from the live camera feed after a freeze. */
     fun resumeLiveCamera() {
         frozenGrid = null
+        frozenSourceBitmap?.recycle()
+        frozenSourceBitmap = null
+    }
+
+    /**
+     * Load an externally picked (and already framed) bitmap as a still image,
+     * replacing the live camera feed exactly like [captureStillImage] does for
+     * a captured frame — the same crop-to-aspect-ratio, smoothing and blob
+     * detection pipeline applies, so all downstream effects work unchanged.
+     */
+    fun loadStillImage(bitmap: Bitmap) {
+        val grid = extractPixelGrid(bitmap, blockSize, resetSmoothing = true, forceBlobs = true)
+        replaceFrozenSource(bitmap)
+        frozenGrid = grid
+        onPixelGridReady(grid)
+    }
+
+    /**
+     * Change the grid resolution. Safe to call whether live or frozen — while
+     * frozen it immediately re-extracts the held still at the new blockSize
+     * (no camera rebind needed, since blockSize only affects the software
+     * grid extraction below), so resolution changes never drop the freeze.
+     */
+    fun setBlockSize(newBlockSize: Int) {
+        if (newBlockSize == blockSize) return
+        blockSize = newBlockSize
+        smoothedColors = null
+        val bitmap = frozenSourceBitmap ?: return
+        val grid = extractPixelGrid(bitmap, blockSize, resetSmoothing = true, forceBlobs = true)
+        frozenGrid = grid
+        onPixelGridReady(grid)
+    }
+
+    /**
+     * Hot-swap the blob modulation params. While frozen, re-extracts the held
+     * still so blob shapes reflect the new params instead of staying stuck
+     * with whatever was detected (or skipped) at freeze time.
+     */
+    fun setBlobModulation(mod: BlobModulation?) {
+        if (mod == blobModulation) return
+        blobModulation = mod
+        val bitmap = frozenSourceBitmap ?: return
+        val grid = extractPixelGrid(bitmap, blockSize, resetSmoothing = true, forceBlobs = true)
+        frozenGrid = grid
+        onPixelGridReady(grid)
+    }
+
+    private fun replaceFrozenSource(bitmap: Bitmap) {
+        if (frozenSourceBitmap !== bitmap) {
+            frozenSourceBitmap?.recycle()
+        }
+        frozenSourceBitmap = bitmap
     }
 
     fun isFrozen(): Boolean = frozenGrid != null
@@ -84,12 +141,17 @@ class CameraPixelAnalyzer(
         try {
             val bitmap = imageProxyToBitmap(image)
             if (bitmap != null) {
-                val pixelGrid = extractPixelGrid(bitmap, blockSize)
+                // If this frame is about to become the frozen still, force blob
+                // detection now regardless of the live feed's CPU-relief cadence
+                // — there's no next frame to catch a skipped detection later.
+                val willFreeze = captureStillRequested
+                val pixelGrid = extractPixelGrid(bitmap, blockSize, forceBlobs = willFreeze)
                 onPixelGridReady(pixelGrid)
 
-                if (captureStillRequested) {
+                if (willFreeze) {
                     captureStillRequested = false
                     captureStill(bitmap)
+                    replaceFrozenSource(bitmap.copy(bitmap.config ?: Bitmap.Config.ARGB_8888, false))
                     frozenGrid = pixelGrid
                 }
 
@@ -162,7 +224,12 @@ class CameraPixelAnalyzer(
         return Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height, matrix, true)
     }
     
-    private fun extractPixelGrid(bitmap: Bitmap, blockSize: Int): PixelGrid {
+    private fun extractPixelGrid(
+        bitmap: Bitmap,
+        blockSize: Int,
+        resetSmoothing: Boolean = false,
+        forceBlobs: Boolean = false
+    ): PixelGrid {
         // blockSize controls grid density along the longer screen axis to minimise
         // integer rounding error. screenAspectRatio = screenWidth / screenHeight.
         // Portrait  (ratio < 1): height is longer → blockSize = rows, cols = rows * ratio
@@ -219,11 +286,20 @@ class CameraPixelAnalyzer(
                 val rawG = android.graphics.Color.green(argb) / 255f
                 val rawB = android.graphics.Color.blue(argb)  / 255f
 
-                // Exponential moving average — smooth across frames
+                // Exponential moving average — smooth across frames. Skipped for
+                // one-shot still loads so the new image doesn't blend with
+                // whatever the buffer held from the last live camera frame.
                 val base = (i * rows + j) * 3
-                val sr = sc[base]     * smoothFactor + rawR * (1f - smoothFactor)
-                val sg = sc[base + 1] * smoothFactor + rawG * (1f - smoothFactor)
-                val sb = sc[base + 2] * smoothFactor + rawB * (1f - smoothFactor)
+                val sr: Float
+                val sg: Float
+                val sb: Float
+                if (resetSmoothing) {
+                    sr = rawR; sg = rawG; sb = rawB
+                } else {
+                    sr = sc[base]     * smoothFactor + rawR * (1f - smoothFactor)
+                    sg = sc[base + 1] * smoothFactor + rawG * (1f - smoothFactor)
+                    sb = sc[base + 2] * smoothFactor + rawB * (1f - smoothFactor)
+                }
                 sc[base] = sr; sc[base + 1] = sg; sc[base + 2] = sb
 
                 val smoothedArgb = android.graphics.Color.rgb(
@@ -243,7 +319,11 @@ class CameraPixelAnalyzer(
         val mod = blobModulation
         return if (mod != null) {
             frameCount++
-            val blobs = if (frameCount % blobFrameInterval == 0) {
+            // One-shot still extractions (freeze/load/resolution or blob-param
+            // change while frozen) always compute fresh blobs — there's no
+            // next frame to catch up on a skipped detection like there is
+            // for the live feed's every-Nth-frame CPU-relief cadence.
+            val blobs = if (forceBlobs || frameCount % blobFrameInterval == 0) {
                 BlobDetector.detectBlobs(grid, mod).also { cachedBlobs = it }
             } else {
                 cachedBlobs
